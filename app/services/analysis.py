@@ -1,4 +1,5 @@
 # app/services/analysis.py
+
 from app.models import Exam, ExamResult
 from collections import defaultdict
 import statistics
@@ -22,22 +23,19 @@ def get_school_performance(school_id, exam_id=None):
     median = statistics.median(marks)
     pass_rate = len([m for m in marks if m >= 50]) / len(marks) * 100
 
-    # Performance by class
-    class_performance = defaultdict(list)
+    # Performance by academic class
+    academic_class_performance = defaultdict(list)
     for result in results:
-        class_performance[result.student.
+        academic_class_performance[result.student.academicClass.name].append(result.marks)
 
-        class .name].append(result.marks)
-
-        class_stats = {}
-        for class_name, marks in class_performance.items():
-            class_stats[class_name] = {
-
-        'mean': statistics.mean(marks),
-        'median': statistics.median(marks),
-        'pass_rate': len([m for m in marks if m >= 50]) / len(marks) * 100,
-        'count': len(marks)
-    }
+    academic_class_stats = {}
+    for class_name, marks in academic_class_performance.items():
+        academic_class_stats[class_name] = {
+            'mean': statistics.mean(marks),
+            'median': statistics.median(marks),
+            'pass_rate': len([m for m in marks if m >= 50]) / len(marks) * 100,
+            'count': len(marks)
+        }
 
     # Performance by subject
     subject_performance = defaultdict(list)
@@ -47,24 +45,23 @@ def get_school_performance(school_id, exam_id=None):
     subject_stats = {}
     for subject_name, marks in subject_performance.items():
         subject_stats[subject_name] = {
-    'mean': statistics.mean(marks),
-    'median': statistics.median(marks),
-    'pass_rate': len([m for m in marks if m >= 50]) / len(marks) * 100,
-    'count': len(marks)
+            'mean': statistics.mean(marks),
+            'median': statistics.median(marks),
+            'pass_rate': len([m for m in marks if m >= 50]) / len(marks) * 100,
+            'count': len(marks)
+        }
 
-}
-
-return {
-    'overall': {
-        'mean': mean,
-        'median': median,
-        'pass_rate': pass_rate,
-        'total_students': len({r.student_id for r in results}),
-        'total_subjects': len({r.subject_id for r in results})
-    },
-    'by_class': class_stats,
-    'by_subject': subject_stats
-}
+    return {
+        'overall': {
+            'mean': mean,
+            'median': median,
+            'pass_rate': pass_rate,
+            'total_students': len({r.student_id for r in results}),
+            'total_subjects': len({r.subject_id for r in results})
+        },
+        'by_academic_class': academic_class_stats,
+        'by_subject': subject_stats
+    }
 
 
 def get_teacher_performance(teacher_id, exam_id=None):

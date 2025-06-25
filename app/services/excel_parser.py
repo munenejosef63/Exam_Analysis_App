@@ -3,8 +3,51 @@ import pandas as pd
 from datetime import datetime
 import phonenumbers
 from email_validator import validate_email, EmailNotValidError
-from app.models import db, Exam, Student, Subject, ExamResult, Class, StudentContact, School
+from app.models import (
+    db,
+    Exam,
+    Student,
+    Subject,
+    ExamResult,
+    AcademicClass,
+    StudentContact,
+    School
+)
 from app import logger
+
+
+def process_exam_upload(file_stream):
+    """
+    Simplified interface for processing exam uploads
+    Returns dict with processed data statistics
+    """
+    try:
+        # Initialize parser with default values
+        parser = ExamParser()
+
+        # Parse the file (using dummy school_id and uploader_id for compatibility)
+        success, message = parser.parse_excel(
+            file_stream=file_stream,
+            school_id=1,  # Should be replaced with actual school_id from session
+            uploader_id=1  # Should be replaced with actual user_id from session
+        )
+
+        if not success:
+            raise Exception(message)
+
+        return {
+            'status': 'success',
+            'students': Student.query.count(),  # Count of processed students
+            'results': ExamResult.query.count(),  # Count of processed results
+            'message': message
+        }
+
+    except Exception as e:
+        logger.error(f"Exam upload processing failed: {str(e)}")
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
 
 
 class ExamParser:

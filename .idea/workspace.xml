@@ -4,17 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="5b171d63-353d-43d9-938f-2d2b605ae7a1" name="Changes" comment="">
+    <list default="true" id="5b171d63-353d-43d9-938f-2d2b605ae7a1" name="Changes" comment="Updating Files">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/services/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/forms.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/forms.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/services/excel_parser.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/excel_parser.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/views/auth.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/views/auth.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/views/dashboard.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/views/dashboard.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/views/forms.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/forms.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/views/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/views/payment.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/views/payment.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app/views/upload.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/views/upload.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
@@ -115,7 +111,20 @@
       <option name="presentableId" value="Default" />
       <updated>1750854169171</updated>
     </task>
+    <task id="LOCAL-00001" summary="Updating Files">
+      <option name="closed" value="true" />
+      <created>1750870857709</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1750870857709</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Updating Files" />
+    <option name="LAST_COMMIT_MESSAGE" value="Updating Files" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
