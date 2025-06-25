@@ -2,7 +2,7 @@ from flask import Blueprint, request, flash, redirect, url_for, current_app
 from flask_login import login_required, current_user
 from app.services.excel_parser import process_exam_upload
 from app.models import School  # Assuming you have a School model
-from app import db, logger
+
 
 upload_bp = Blueprint('upload', __name__)
 

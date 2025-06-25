@@ -1,10 +1,8 @@
-# app/views/payment.py
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 from app.models import School, Payment, db
 import stripe
-from app import app
 
 payment_bp = Blueprint('payment', __name__)
 
@@ -16,6 +14,9 @@ def payment():
         flash('Only school administrators can make payments', 'danger')
         return redirect(url_for('dashboard.dashboard'))
 
+    # Set Stripe API key from Flask config
+    stripe.api_key = current_app.config['STRIPE_SECRET_KEY']
+
     school = current_user.school
 
     if request.method == 'POST':
@@ -23,7 +24,6 @@ def payment():
         subscription_type = request.form.get('subscription_type')
 
         if payment_method == 'stripe':
-            # Process Stripe payment
             token = request.form.get('stripeToken')
             amount = 10000 if subscription_type == 'annual' else 1000  # in cents
 
@@ -35,16 +35,14 @@ def payment():
                     source=token
                 )
 
-                # Update school subscription
                 expiry_date = datetime.utcnow() + timedelta(days=365 if subscription_type == 'annual' else 30)
                 school.subscription_type = subscription_type
                 school.subscription_expiry = expiry_date
                 school.is_active = True
 
-                # Record payment
                 payment = Payment(
                     school_id=school.id,
-                    amount=amount / 100,  # convert to dollars
+                    amount=amount / 100,
                     payment_method='stripe',
                     transaction_id=charge.id,
                     status='completed',
@@ -60,41 +58,36 @@ def payment():
                 flash(f'Payment failed: {str(e)}', 'danger')
 
         elif payment_method == 'mpesa':
-            # Initiate Mpesa payment (simplified)
-            # In a real app, you'd use the Mpesa API
             flash('Mpesa payment initiated. Complete payment on your phone.', 'info')
             return redirect(url_for('payment.mpesa_callback'))
 
-    return render_template('payment.html', school=school)
+    return render_template('payment.html', school=school, stripe_key=current_app.config['STRIPE_PUBLISHABLE_KEY'])
 
 
 @payment_bp.route('/mpesa-callback', methods=['POST'])
 def mpesa_callback():
-    # This would handle the Mpesa callback in a real app
-    # For now, we'll simulate a successful payment
     school_id = request.json.get('school_id')
-    amount = request.json.get('amount'))
+    amount = request.json.get('amount')
     subscription_type = 'annual' if amount == 10000 else 'monthly'
 
     school = School.query.get(school_id)
     if school:
         expiry_date = datetime.utcnow() + timedelta(days=365 if subscription_type == 'annual' else 30)
-    school.subscription_type = subscription_type
-    school.subscription_expiry = expiry_date
-    school.is_active = True
+        school.subscription_type = subscription_type
+        school.subscription_expiry = expiry_date
+        school.is_active = True
 
-    payment = Payment(
-    school_id = school.id,
-    amount = amount / 100,
-    payment_method = 'mpesa',
-    transaction_id = request.json.get('mpesa_code'),
-    status = 'completed',
-    subscription_period = subscription_type
+        payment = Payment(
+            school_id=school.id,
+            amount=amount / 100,
+            payment_method='mpesa',
+            transaction_id=request.json.get('mpesa_code'),
+            status='completed',
+            subscription_period=subscription_type
+        )
+        db.session.add(payment)
+        db.session.commit()
 
-)
-db.session.add(payment)
-db.session.commit()
+        return jsonify({'status': 'success'})
 
-return jsonify({'status': 'success'})
-
-return jsonify({'status': 'error', 'message': 'School not found'}), 404
+    return jsonify({'status': 'error', 'message': 'School not found'}), 404
