@@ -1,0 +1,30 @@
+├── app/
+│   ├── __init__.py              # Initializes Flask app and extensions
+│   ├── models.py                # All database models
+│   ├── forms.py                 # WTForms (if needed)
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── excel_parser.py      # Excel parsing logic using pandas
+│   │   └── analysis.py          # Performance analytics
+│   ├── views/
+│   │   ├── __init__.py
+│   │   ├── auth.py              # Register, login
+│   │   ├── dashboard.py         # Admin/teacher/parent dashboards
+│   │   ├── upload.py            # Exam upload route
+│   │   └── payment.py           # Stripe or Mpesa routes
+│   ├── templates/
+│   │   ├── layout.html
+│   │   ├── login.html
+│   │   ├── dashboard_admin.html
+│   │   ├── dashboard_teacher.html
+│   │   └── dashboard_parent.html
+│   └── static/
+│       ├── css/
+│       └── js/
+│
+├── migrations/                  # Flask-Migrate database migrations
+├── .env                         # Secrets and environment variables
+├── config.py                    # Configuration settings
+├── requirements.txt             # All Python dependencies
+├── run.py                       # Flask app entry point
+└── README.md                    # Project overview

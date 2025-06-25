@@ -1,0 +1,126 @@
+{% extends "layout.html" %}
+
+{% block title %}Parent Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .performance-trend {
+        height: 300px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Parent Dashboard</h2>
+</div>
+
+<div class="row">
+    {% for student in students %}
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>{{ student.name }} ({{ student.class.name }})</h5>
+            </div>
+            <div class="card-body">
+                {% if performances[student.id] %}
+                    <div class="row mb-3">
+                        <div class="col-md-4 text-center">
+                            <h6>Average</h6>
+                            <div class="display-4 text-primary">{{ "%.1f"|format(performances[student.id].overall.mean) }}</div>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <h6>Best Subject</h6>
+                            <div class="display-6 text-success">
+                                {% set best_subject = performances[student.id].by_subject|dictsort(by='value.marks')|last %}
+                                {{ best_subject[0] }} ({{ "%.1f"|format(best_subject[1].marks) }})
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <h6>Weakest Subject</h6>
+                            <div class="display-6 text-danger">
+                                {% set weak_subject = performances[student.id].by_subject|dictsort(by='value.marks')|first %}
+                                {{ weak_subject[0] }} ({{ "%.1f"|format(weak_subject[1].marks) }})
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="mt-3">Performance Trend</h6>
+                    <div class="performance-trend">
+                        <canvas id="trendChart{{ student.id }}"></canvas>
+                    </div>
+
+                    <h6 class="mt-4">Subject Performance</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Subject</th>
+                                    <th>Marks</th>
+                                    <th>Grade</th>
+                                    <th>Position</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for subject, data in performances[student.id].by_subject.items() %}
+                                <tr>
+                                    <td>{{ subject }}</td>
+                                    <td>{{ "%.1f"|format(data.marks) }}</td>
+                                    <td>{{ data.grade }}</td>
+                                    <td>{{ data.position }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        No performance data available for {{ student.name }} yet.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% for student in students %}
+{% if performances[student.id] %}
+<script>
+    // Performance trend chart for {{ student.name }}
+    const ctx{{ student.id }} = document.getElementById('trendChart{{ student.id }}').getContext('2d');
+    const examLabels{{ student.id }} = {{ performances[student.id].by_exam.keys()|list|tojson }};
+    const examData{{ student.id }} = [];
+
+    {% for exam, data in performances[student.id].by_exam.items() %}
+        examData{{ student.id }}.push({{ data.subjects.values()|map(attribute='marks')|sum / data.subjects|length }});
+    {% endfor %}
+
+    new Chart(ctx{{ student.id }}, {
+        type: 'line',
+        data: {
+            labels: examLabels{{ student.id }},
+            datasets: [{
+                label: 'Average Score',
+                data: examData{{ student.id }},
+                fill: false,
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+</script>
+{% endif %}
+{% endfor %}
+{% endblock %}

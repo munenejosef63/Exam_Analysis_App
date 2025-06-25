@@ -1,0 +1,180 @@
+{% extends "layout.html" %}
+
+{% block title %}School Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .performance-card {
+        transition: transform 0.3s;
+    }
+    .performance-card:hover {
+        transform: translateY(-5px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>{{ school.name }} Dashboard</h2>
+    {% if not school.is_active or school.subscription_expiry < current_date %}
+        <a href="{{ url_for('payment.payment') }}" class="btn btn-danger">Renew Subscription</a>
+    {% endif %}
+</div>
+
+{% if performance %}
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card performance-card text-white bg-primary">
+            <div class="card-body text-center">
+                <h5 class="card-title">Mean Score</h5>
+                <p class="card-text display-4">{{ "%.1f"|format(performance.overall.mean) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card performance-card text-white bg-success">
+            <div class="card-body text-center">
+                <h5 class="card-title">Pass Rate</h5>
+                <p class="card-text display-4">{{ "%.1f"|format(performance.overall.pass_rate) }}%</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card performance-card text-white bg-info">
+            <div class="card-body text-center">
+                <h5 class="card-title">Students</h5>
+                <p class="card-text display-4">{{ performance.overall.total_students }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card performance-card text-white bg-warning">
+            <div class="card-body text-center">
+                <h5 class="card-title">Subjects</h5>
+                <p class="card-text display-4">{{ performance.overall.total_subjects }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Performance by Class</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="classPerformanceChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>Performance by Subject</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="subjectPerformanceChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5>Recent Exams</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Exam</th>
+                        <th>Date</th>
+                        <th>Mean Score</th>
+                        <th>Pass Rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for exam in exams %}
+                    <tr>
+                        <td>{{ exam.name }}</td>
+                        <td>{{ exam.exam_date.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ "%.1f"|format(exam.mean_score) if exam.mean_score else 'N/A' }}</td>
+                        <td>{{ "%.1f"|format(exam.pass_rate) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+    No performance data available. Upload exam results to get started.
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+{% if performance %}
+<script>
+    // Class Performance Chart
+    const classCtx = document.getElementById('classPerformanceChart').getContext('2d');
+    const classLabels = {{ performance.by_class.keys()|list|tojson }};
+    const classMeans = {{ performance.by_class.values()|map(attribute='mean')|list|tojson }};
+
+    new Chart(classCtx, {
+        type: 'bar',
+        data: {
+            labels: classLabels,
+            datasets: [{
+                label: 'Mean Score',
+                data: classMeans,
+                backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+
+    // Subject Performance Chart
+    const subjectCtx = document.getElementById('subjectPerformanceChart').getContext('2d');
+    const subjectLabels = {{ performance.by_subject.keys()|list|tojson }};
+    const subjectMeans = {{ performance.by_subject.values()|map(attribute='mean')|list|tojson }};
+
+    new Chart(subjectCtx, {
+        type: 'bar',
+        data: {
+            labels: subjectLabels,
+            datasets: [{
+                label: 'Mean Score',
+                data: subjectMeans,
+                backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100
+                }
+            }
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

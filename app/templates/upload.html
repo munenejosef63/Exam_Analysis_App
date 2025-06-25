@@ -1,0 +1,91 @@
+{% extends "layout.html" %}
+
+{% block title %}Upload Exam Results{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h4>Upload Exam Results</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.exam_name.label(class="form-label") }}
+                        {{ form.exam_name(class="form-control") }}
+                        {% if form.exam_name.errors %}
+                            <div class="invalid-feedback">
+                                {{ form.exam_name.errors[0] }}
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.exam_date.label(class="form-label") }}
+                        {{ form.exam_date(class="form-control") }}
+                        {% if form.exam_date.errors %}
+                            <div class="invalid-feedback">
+                                {{ form.exam_date.errors[0] }}
+                            </div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.file.label(class="form-label") }}
+                        {{ form.file(class="form-control") }}
+                        {% if form.file.errors %}
+                            <div class="invalid-feedback">
+                                {{ form.file.errors[0] }}
+                            </div>
+                        {% endif %}
+                        <div class="form-text">
+                            Upload Excel file with columns: AdmissionNumber, StudentName, Class, Subject1, Subject2, ...
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Upload</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if exams %}
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Previous Uploads</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Exam</th>
+                                <th>Date</th>
+                                <th>Uploaded On</th>
+                                <th>Records</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for exam in exams %}
+                            <tr>
+                                <td>{{ exam.name }}</td>
+                                <td>{{ exam.exam_date.strftime('%Y-%m-%d') }}</td>
+                                <td>{{ exam.upload_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>{{ exam.results|length }}</td>
+                                <td>
+                                    <a href="{{ url_for('dashboard.view_exam', exam_id=exam.id) }}" class="btn btn-sm btn-primary">View</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,109 @@
+{% extends "layout.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Admin Dashboard</h2>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card text-white bg-primary">
+            <div class="card-body">
+                <h5 class="card-title">Schools</h5>
+                <p class="card-text display-4">{{ schools|length }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card text-white bg-success">
+            <div class="card-body">
+                <h5 class="card-title">Active Subscriptions</h5>
+                <p class="card-text display-4">{{ schools|selectattr('is_active')|list|length }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card text-white bg-info">
+            <div class="card-body">
+                <h5 class="card-title">Total Revenue</h5>
+                <p class="card-text display-4">${{ "%.2f"|format(payments|sum(attribute='amount')) }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Recent Payments</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>School</th>
+                                <th>Amount</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in payments %}
+                            <tr>
+                                <td>{{ payment.school.name }}</td>
+                                <td>${{ "%.2f"|format(payment.amount) }}</td>
+                                <td>{{ payment.payment_date.strftime('%Y-%m-%d') }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if payment.status == 'completed' else 'warning' }}">
+                                        {{ payment.status }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Schools Overview</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>School</th>
+                                <th>Subscription</th>
+                                <th>Status</th>
+                                <th>Expiry</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for school in schools %}
+                            <tr>
+                                <td>{{ school.name }}</td>
+                                <td>{{ school.subscription_type|capitalize if school.subscription_type else 'None' }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if school.is_active else 'danger' }}">
+                                        {{ 'Active' if school.is_active else 'Inactive' }}
+                                    </span>
+                                </td>
+                                <td>{{ school.subscription_expiry.strftime('%Y-%m-%d') if school.subscription_expiry else 'N/A' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

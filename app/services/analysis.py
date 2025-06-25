@@ -1,5 +1,5 @@
 # app/services/analysis.py
-from app.models import db, Exam, Student, Class, Subject, ExamResult
+from app.views.models import db, Exam, ExamResult
 from collections import defaultdict
 import statistics
 
