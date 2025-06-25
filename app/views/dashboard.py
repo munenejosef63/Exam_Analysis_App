@@ -1,8 +1,8 @@
 # app/views/dashboard.py
 from flask import Blueprint, render_template, flash, redirect, url_for
 from flask_login import login_required, current_user
-from app.services.analysis import get_school_performance, get_student_performance
-from app.views.models import Exam, School, Payment
+from app import get_school_performance, get_student_performance
+from app.models import Exam, School, Payment
 
 dashboard_bp = Blueprint('dashboard', __name__)
 

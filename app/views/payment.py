@@ -2,7 +2,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 from datetime import datetime, timedelta
-from app.views.models import School, Payment, db
+from app.models import School, Payment, db
 import stripe
 from app import app
 
