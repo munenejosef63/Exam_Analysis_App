@@ -9,7 +9,7 @@ load_dotenv(os.path.join(basedir, '.env'))
 class Config:
     SECRET_KEY = os.environ.get('75b10eae0ecb81c6daf7362cd1a583a3') or 'hard-to-guess-string'
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
-                              'postgresql://postgres@localhost/exam_analysis'
+                              'postgresql://postgres:Masterpiece@localhost:5432/exam_analysis'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Payment configuration

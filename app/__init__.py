@@ -1,10 +1,9 @@
-# app/__init__.py
 import logging
+import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_migrate import Migrate
-import os
 from logging.handlers import RotatingFileHandler
 
 # Initialize extensions
@@ -29,18 +28,27 @@ def create_app(config_class=None):
     # Register blueprints
     register_blueprints(app)
 
+    # Register error handlers
+    register_error_handlers(app)
+
     return app
 
 
 def configure_app(app, config_class):
     """Handle application configuration"""
     # Default configuration
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv(
-        'DATABASE_URL',
-        'postgresql://postgres@localhost/exam_analysis'
+    app.config.from_mapping(
+        SECRET_KEY=os.getenv('SECRET_KEY', 'dev-secret-key'),
+        SQLALCHEMY_DATABASE_URI=os.getenv(
+            'DATABASE_URL',
+            'postgresql://postgres@localhost/exam_analysis'
+        ),
+        SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        SQLALCHEMY_ENGINE_OPTIONS={
+            'pool_pre_ping': True,
+            'pool_recycle': 300,
+        }
     )
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # Load additional configuration if provided
     if config_class:
@@ -49,26 +57,44 @@ def configure_app(app, config_class):
 
 def initialize_extensions(app):
     """Initialize Flask extensions"""
+    # Database
     db.init_app(app)
-    login_manager.init_app(app)
-    migrate.init_app(app, db)
 
+    # Login Manager
+    login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message_category = 'info'
+    login_manager.session_protection = "strong"
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        from app.models import User
+        try:
+            return User.query.get(int(user_id))
+        except Exception as e:
+            app.logger.error(f"Error loading user {user_id}: {str(e)}")
+            return None
+
+    # Migrations
+    migrate.init_app(app, db)
 
 
 def configure_logging(app):
     """Configure application logging"""
-    if not app.debug and not app.testing:
-        # Ensure logs directory exists
+    if app.debug:
+        # Detailed debug logging during development
+        logging.basicConfig(level=logging.DEBUG)
+        app.logger.setLevel(logging.DEBUG)
+    else:
+        # Production logging configuration
         if not os.path.exists('logs'):
             os.mkdir('logs')
 
-        # Create rotating file handler
         file_handler = RotatingFileHandler(
             'logs/exam_analysis.log',
-            maxBytes=10240,
-            backupCount=10
+            maxBytes=10240 * 10,  # 100KB
+            backupCount=10,
+            encoding='utf-8'
         )
         file_handler.setFormatter(logging.Formatter(
             '%(asctime)s %(levelname)s: %(message)s '
@@ -78,7 +104,7 @@ def configure_logging(app):
 
         app.logger.addHandler(file_handler)
         app.logger.setLevel(logging.INFO)
-        app.logger.info('Exam Analysis startup')
+        app.logger.info('Exam Analysis application startup')
 
 
 def register_blueprints(app):
@@ -88,7 +114,39 @@ def register_blueprints(app):
     from app.views.upload import upload_bp
     from app.views.payment import payment_bp
 
-    app.register_blueprint(auth_bp)
+    # Main application blueprints
+    app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(dashboard_bp)
-    app.register_blueprint(upload_bp)
-    app.register_blueprint(payment_bp)
+    app.register_blueprint(upload_bp, url_prefix='/upload')
+    app.register_blueprint(payment_bp, url_prefix='/payment')
+
+    # API blueprints would be registered here if needed
+    # from app.api import api_bp
+    # app.register_blueprint(api_bp, url_prefix='/api/v1')
+
+
+def register_error_handlers(app):
+    """Register global error handlers"""
+    from flask import render_template
+
+    @app.errorhandler(404)
+    def page_not_found(e):
+        return render_template('errors/404.html'), 404
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template('errors/403.html'), 403
+
+    @app.errorhandler(500)
+    def internal_server_error(e):
+        app.logger.error(f"500 Error: {str(e)}")
+        return render_template('errors/500.html'), 500
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(e):
+        app.logger.error(f"Unexpected error: {str(e)}")
+        return render_template('errors/500.html'), 500
+
+
+# Import models at the end to avoid circular imports
+from app import models
