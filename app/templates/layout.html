@@ -23,7 +23,7 @@
                                 <a class="nav-link" href="{{ url_for('dashboard.school_dashboard') }}">Dashboard</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('upload.upload_exam') }}">Upload Exams</a>
+                                <a class="nav-link" href="{{ url_for('upload.upload') }}">Upload Exams</a>
                             </li>
                         {% elif current_user.role == 'teacher' %}
                             <li class="nav-item">
