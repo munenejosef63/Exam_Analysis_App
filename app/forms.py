@@ -22,7 +22,8 @@ class RegistrationForm(FlaskForm):
     role = SelectField('Role', choices=[
         ('school_admin', 'School Administrator'),
         ('teacher', 'Teacher'),
-        ('parent', 'Parent')
+        ('parent', 'Parent'),
+        ('admin', 'System Admin')
     ], validators=[DataRequired()])
     school_name = StringField('School Name', validators=[DataRequired()])
     school_location = StringField('School Location', validators=[DataRequired()])

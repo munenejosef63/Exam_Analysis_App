@@ -25,6 +25,7 @@ class User(db.Model, UserMixin):
     notification_preference = db.Column(db.String(20), default='email')  # 'email', 'whatsapp', 'sms'
     email_verified = db.Column(db.Boolean, default=False)
     phone_verified = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)  # Correct definition
 
     # Relationships
     school = db.relationship('School', back_populates='users')
