@@ -1,0 +1,60 @@
+{% extends "layout.html" %}
+
+{% block title %}Page Not Found{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="error-card p-5 rounded shadow">
+                <h1 class="display-4 text-danger mb-4">
+                    <i class="bi bi-exclamation-octagon-fill"></i> 404
+                </h1>
+                <h2 class="mb-4">Page Not Found</h2>
+                <p class="lead mb-4">The page you're looking for doesn't exist or has been moved.</p>
+
+                {% if current_user.is_authenticated %}
+                    {% if current_user.role == 'admin' %}
+                        <a href="{{ url_for('dashboard.admin_dashboard') }}" class="btn btn-primary">
+                            <i class="bi bi-speedometer2"></i> Return to Admin Dashboard
+                        </a>
+                    {% elif current_user.role == 'school' %}
+                        <a href="{{ url_for('dashboard.school_dashboard') }}" class="btn btn-primary">
+                            <i class="bi bi-speedometer2"></i> Return to School Dashboard
+                        </a>
+                    {% elif current_user.role == 'teacher' %}
+                        <a href="{{ url_for('dashboard.teacher_dashboard') }}" class="btn btn-primary">
+                            <i class="bi bi-speedometer2"></i> Return to Teacher Dashboard
+                        </a>
+                    {% elif current_user.role == 'parent' %}
+                        <a href="{{ url_for('dashboard.parent_dashboard') }}" class="btn btn-primary">
+                            <i class="bi bi-speedometer2"></i> Return to Parent Dashboard
+                        </a>
+                    {% endif %}
+                {% else %}
+                    <a href="{{ url_for('auth.login') }}" class="btn btn-primary">
+                        <i class="bi bi-box-arrow-in-right"></i> Go to Login Page
+                    </a>
+                {% endif %}
+
+                {% if config.DEBUG and error %}
+                <div class="mt-4 p-3 bg-light rounded">
+                    <h5>Debug Information:</h5>
+                    <p class="text-muted mb-1">{{ error }}</p>
+                    <small class="text-muted">{{ request.url }}</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .error-card {
+        background-color: #f8f9fa;
+        border-left: 5px solid #dc3545;
+    }
+</style>
+{% endblock %}

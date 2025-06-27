@@ -1,0 +1,70 @@
+{% extends "layout.html" %}
+
+{% block title %}Access Denied{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8 text-center">
+            <div class="error-card p-5 rounded shadow">
+                <h1 class="display-4 text-warning mb-4">
+                    <i class="bi bi-shield-lock-fill"></i> 403
+                </h1>
+                <h2 class="mb-4">Access Denied</h2>
+                <p class="lead mb-4">You don't have permission to access this page.</p>
+
+                {% if current_user.is_authenticated %}
+                    <div class="d-flex justify-content-center gap-3">
+                        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-house"></i> Home
+                        </a>
+                        {% if current_user.role == 'admin' %}
+                            <a href="{{ url_for('dashboard.admin_dashboard') }}" class="btn btn-primary">
+                                <i class="bi bi-speedometer2"></i> Admin Dashboard
+                            </a>
+                        {% elif current_user.role == 'school' %}
+                            <a href="{{ url_for('dashboard.school_dashboard') }}" class="btn btn-primary">
+                                <i class="bi bi-speedometer2"></i> School Dashboard
+                            </a>
+                        {% elif current_user.role == 'teacher' %}
+                            <a href="{{ url_for('dashboard.teacher_dashboard') }}" class="btn btn-primary">
+                                <i class="bi bi-speedometer2"></i> Teacher Dashboard
+                            </a>
+                        {% elif current_user.role == 'parent' %}
+                            <a href="{{ url_for('dashboard.parent_dashboard') }}" class="btn btn-primary">
+                                <i class="bi bi-speedometer2"></i> Parent Dashboard
+                            </a>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="d-flex justify-content-center gap-3">
+                        <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-house"></i> Home
+                        </a>
+                        <a href="{{ url_for('auth.login') }}" class="btn btn-primary">
+                            <i class="bi bi-box-arrow-in-right"></i> Login
+                        </a>
+                    </div>
+                {% endif %}
+
+                {% if config.DEBUG and error %}
+                <div class="mt-4 p-3 bg-light rounded">
+                    <h5>Debug Information:</h5>
+                    <p class="text-muted mb-1">{{ error }}</p>
+                    <small class="text-muted">{{ request.url }}</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .error-card {
+        background-color: #f8f9fa;
+        border-left: 5px solid #ffc107;
+    }
+</style>
+{% endblock %}

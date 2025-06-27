@@ -1,50 +1,172 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upload Exam Results</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body>
-    <div class="container mt-5">
-        <div class="row">
-            <div class="col-md-6 offset-md-3">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Upload Exam Results</h3>
-                    </div>
-                    <div class="card-body">
-                        {% with messages = get_flashed_messages(with_categories=true) %}
-                            {% if messages %}
-                                {% for category, message in messages %}
-                                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                                {% endfor %}
-                            {% endif %}
-                        {% endwith %}
+{% extends "layout.html" %}
 
-                        <form method="POST" enctype="multipart/form-data">
-                            <div class="mb-3">
-                                <label for="exam_name" class="form-label">Exam Name</label>
-                                <input type="text" class="form-control" id="exam_name" name="exam_name" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="exam_date" class="form-label">Exam Date</label>
-                                <input type="date" class="form-control" id="exam_date" name="exam_date" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="file" class="form-label">Excel File</label>
-                                <input type="file" class="form-control" id="file" name="file" accept=".xlsx,.xls" required>
-                                <div class="form-text">Upload Excel file (.xlsx or .xls) with student results</div>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Upload</button>
-                        </form>
+{% block title %}Upload Exam Results{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h3 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Upload Exam Results</h3>
+                        <a href="{{ url_for('static', filename='templates/Exam_Analysis_Template.xlsx') }}"
+                           class="btn btn-sm btn-light" download>
+                            <i class="bi bi-download me-1"></i>Download Template
+                        </a>
                     </div>
+                </div>
+
+                <div class="card-body">
+                    <!-- Flash Messages -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <!-- Upload Form -->
+                    <form id="uploadForm" method="POST" enctype="multipart/form-data" novalidate>
+                        <!-- CSRF Protection (only include if Flask-WTF is properly initialized) -->
+                        {% if csrf_token %}
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% endif %}
+
+                        <!-- Exam Name -->
+                        <div class="mb-4">
+                            <label for="exam_name" class="form-label fw-bold">Exam Name</label>
+                            <input type="text" class="form-control form-control-lg" id="exam_name"
+                                   name="exam_name" required placeholder="E.g. Mid-Term Exams 2023">
+                            <div class="invalid-feedback">Please provide an exam name</div>
+                        </div>
+
+                        <!-- Exam Date -->
+                        <div class="mb-4">
+                            <label for="exam_date" class="form-label fw-bold">Exam Date</label>
+                            <input type="date" class="form-control form-control-lg" id="exam_date"
+                                   name="exam_date" required>
+                            <div class="invalid-feedback">Please select the exam date</div>
+                        </div>
+
+                        <!-- File Upload -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Results File</label>
+                            <div class="file-upload-area border rounded p-4 text-center">
+                                <input type="file" id="fileInput" name="file"
+                                       class="d-none" accept=".xlsx,.xls" required>
+                                <div id="fileDropArea" class="p-3 border-dashed rounded cursor-pointer">
+                                    <i class="bi bi-file-earmark-excel display-4 text-primary mb-3"></i>
+                                    <h5>Drag & drop your Excel file here</h5>
+                                    <p class="text-muted">or click to browse files</p>
+                                    <p class="small text-muted mt-2">Supports .xlsx or .xls files (Max 10MB)</p>
+                                </div>
+                                <div id="fileNameDisplay" class="mt-3 fw-bold d-none">
+                                    Selected file: <span id="fileName"></span>
+                                </div>
+                                <div class="invalid-feedback">Please select an Excel file to upload</div>
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                                <i class="bi bi-upload me-2"></i>Upload Results
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.getElementById('fileInput');
+    const fileDropArea = document.getElementById('fileDropArea');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+    const fileName = document.getElementById('fileName');
+    const uploadForm = document.getElementById('uploadForm');
+    const submitBtn = document.getElementById('submitBtn');
+
+    // Handle drag and drop
+    fileDropArea.addEventListener('click', () => fileInput.click());
+
+    fileDropArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        fileDropArea.classList.add('bg-light');
+    });
+
+    fileDropArea.addEventListener('dragleave', () => {
+        fileDropArea.classList.remove('bg-light');
+    });
+
+    fileDropArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        fileDropArea.classList.remove('bg-light');
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            updateFileName();
+        }
+    });
+
+    fileInput.addEventListener('change', updateFileName);
+
+    function updateFileName() {
+        if (fileInput.files.length) {
+            const file = fileInput.files[0];
+            fileName.textContent = file.name;
+            fileNameDisplay.classList.remove('d-none');
+
+            // Validate file type
+            const validTypes = ['application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+            if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/)) {
+                fileInput.setCustomValidity('Please upload a valid Excel file (.xlsx or .xls)');
+                fileDropArea.classList.add('border-danger');
+            } else {
+                fileInput.setCustomValidity('');
+                fileDropArea.classList.remove('border-danger');
+            }
+        }
+    }
+
+    // Form submission handling
+    uploadForm.addEventListener('submit', function(e) {
+        if (!uploadForm.checkValidity()) {
+            e.preventDefault();
+            e.stopPropagation();
+        } else {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Processing...
+            `;
+        }
+
+        uploadForm.classList.add('was-validated');
+    });
+});
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .border-dashed {
+        border: 2px dashed #dee2e6;
+    }
+    .cursor-pointer {
+        cursor: pointer;
+    }
+    .file-upload-area:hover .border-dashed {
+        border-color: #4e73df;
+        background-color: rgba(78, 115, 223, 0.05);
+    }
+</style>
+{% endblock %}
