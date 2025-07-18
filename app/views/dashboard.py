@@ -1,11 +1,12 @@
 from flask import Blueprint, render_template, flash, redirect, url_for, make_response
 from flask_login import login_required, current_user
 from app.services.analysis import get_school_performance, get_student_performance, update_school_performance
-from app.models import Exam, School, Payment, Subject, AcademicClass, User, ExamResult
+from app.models import Exam, School, Payment, Subject, AcademicClass, User, ExamResult, teacher_subjects
 from app import db
 from datetime import datetime, timedelta
-from sqlalchemy import func, desc, case
+from sqlalchemy import func, desc, case, and_
 import logging
+from sqlalchemy import distinct
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -15,16 +16,13 @@ dashboard_bp = Blueprint('dashboard', __name__)
 
 def get_teacher_subjects(teacher):
     """Get subjects taught by a teacher with class information and recent results"""
-    subjects = Subject.query.join(AcademicClass) \
-        .filter(AcademicClass.school_id == teacher.school_id) \
-        .options(db.joinedload(Subject.academic_class)) \
-        .all()
+    subjects = teacher.taught_subjects.all()
 
-    # Add recent results for each subject
+    # Add class information and recent results for each subject
     for subject in subjects:
         subject.recent_results = ExamResult.query \
             .join(Exam, ExamResult.exam_id == Exam.id) \
-            .filter_by(subject_id=subject.id) \
+            .filter(ExamResult.subject_id == subject.id) \
             .order_by(desc(Exam.exam_date)) \
             .limit(5) \
             .all()
@@ -53,10 +51,42 @@ def get_recent_exams(school_id, limit=5):
                               .filter_by(exam_id=exam.id) \
                               .scalar() or 0
         exam.pass_rate = db.session.query(
-            func.avg(case((ExamResult.marks >= 50, 1), else_=0))) \
-                             .filter_by(exam_id=exam.id) \
-                             .scalar() * 100 or 0
+            func.avg(case((ExamResult.marks >= 50, 1), else_=0))
+        ).filter_by(exam_id=exam.id) \
+         .scalar() * 100 or 0
+        exam.student_count = ExamResult.query.filter_by(exam_id=exam.id).count()
+        exam.trend = calculate_exam_trend(exam.id)
     return exams
+
+def calculate_exam_trend(exam_id):
+    """Calculate trend for a specific exam compared to previous similar exam"""
+    current_exam = Exam.query.get(exam_id)
+    if not current_exam or not current_exam.subjects:
+        return 0
+
+    # Get the first subject (assuming exams typically have one primary subject)
+    current_subject = current_exam.subjects[0]
+
+    # Find previous exams for the same subject
+    prev_exam = Exam.query.join(ExamResult) \
+        .filter(
+        Exam.school_id == current_exam.school_id,
+        ExamResult.subject_id == current_subject.id,
+        Exam.id != current_exam.id,
+        Exam.exam_date < current_exam.exam_date
+    ) \
+        .order_by(desc(Exam.exam_date)) \
+        .first()
+
+    if not prev_exam:
+        return 0
+
+    current_avg = db.session.query(func.avg(ExamResult.marks)) \
+                      .filter_by(exam_id=current_exam.id).scalar() or 0
+    prev_avg = db.session.query(func.avg(ExamResult.marks)) \
+                   .filter_by(exam_id=prev_exam.id).scalar() or 0
+
+    return round(((current_avg - prev_avg) / prev_avg) * 100, 2) if prev_avg != 0 else 0
 
 
 def get_recent_activity(school_id, limit=5):
@@ -133,6 +163,111 @@ def get_subject_performance(school_id):
         .all()
 
     return {r.name: {'mean': r.mean, 'pass_rate': r.pass_rate} for r in results}
+
+
+def get_grade_distribution(school_id):
+    """Get distribution of grades across all exams"""
+    grade_counts = db.session.query(
+        ExamResult.grade,
+        func.count(ExamResult.id)
+    ).join(Exam) \
+        .filter(Exam.school_id == school_id) \
+        .group_by(ExamResult.grade) \
+        .all()
+
+    return {grade: count for grade, count in grade_counts}
+
+
+def get_teacher_performance_metrics(school_id):
+    """Get performance metrics for all teachers in school"""
+    return db.session.query(
+        User.username.label('name'),
+        func.count(distinct(Subject.id)).label('subject_count'),
+        func.avg(ExamResult.marks).label('avg_score'),
+        (func.avg(case((ExamResult.marks >= 50, 1), else_=0)) * 100).label('pass_rate')
+    ).join(teacher_subjects, teacher_subjects.c.teacher_id == User.id) \
+        .join(Subject, teacher_subjects.c.subject_id == Subject.id) \
+        .join(ExamResult, ExamResult.subject_id == Subject.id) \
+        .filter(User.school_id == school_id, User.role == 'teacher') \
+        .group_by(User.id, User.username) \
+        .all()
+
+
+def get_top_students(school_id, limit=5):
+    """Get top performing students"""
+    return db.session.query(
+        User.username,
+        func.avg(ExamResult.marks).label('avg_score')
+    ).join(ExamResult, ExamResult.student_id == User.id) \
+        .filter(User.school_id == school_id, User.role == 'student') \
+        .group_by(User.id) \
+        .order_by(func.avg(ExamResult.marks).desc()) \
+        .limit(limit) \
+        .all()
+
+
+def get_bottom_students(school_id, limit=5):
+    """Get students needing improvement"""
+    return db.session.query(
+        User.username,
+        func.avg(ExamResult.marks).label('avg_score')
+    ).join(ExamResult, ExamResult.student_id == User.id) \
+        .filter(User.school_id == school_id, User.role == 'student') \
+        .group_by(User.id) \
+        .order_by(func.avg(ExamResult.marks).asc()) \
+        .limit(limit) \
+        .all()
+
+
+def calculate_trend_percentage(values):
+    """Calculate percentage change between last two values"""
+    if len(values) < 2:
+        return 0
+    current = values[-1]
+    previous = values[-2]
+    if previous == 0:
+        return 0
+    return ((current - previous) / previous) * 100
+
+
+def get_performance_trend_data(school_id, months=6):
+    """Get comprehensive performance trend data for charts and indicators"""
+    # Get mean scores trend
+    mean_trend = db.session.query(
+        func.to_char(Exam.exam_date, 'YYYY-MM').label('month'),
+        func.avg(ExamResult.marks).label('avg_marks')
+    ).join(ExamResult) \
+        .filter(Exam.school_id == school_id) \
+        .group_by(func.to_char(Exam.exam_date, 'YYYY-MM')) \
+        .order_by(func.to_char(Exam.exam_date, 'YYYY-MM').desc()) \
+        .limit(months).all()
+
+    # Get pass rates trend
+    pass_rate_trend = db.session.query(
+        func.to_char(Exam.exam_date, 'YYYY-MM').label('month'),
+        (func.avg(case((ExamResult.marks >= 50, 1), else_=0)) * 100).label('pass_rate')
+    ).join(ExamResult) \
+        .filter(Exam.school_id == school_id) \
+        .group_by(func.to_char(Exam.exam_date, 'YYYY-MM')) \
+        .order_by(func.to_char(Exam.exam_date, 'YYYY-MM').desc()) \
+        .limit(months).all()
+
+    # Prepare data
+    exam_periods = [t.month for t in mean_trend]
+    mean_scores = [float(t.avg_marks) for t in mean_trend]
+    pass_rates = [float(t.pass_rate) for t in pass_rate_trend]
+
+    # Calculate trend percentages
+    mean_trend_pct = calculate_trend_percentage(mean_scores) if mean_scores else 0
+    pass_rate_trend_pct = calculate_trend_percentage(pass_rates) if pass_rates else 0
+
+    return {
+        'exam_periods': exam_periods,
+        'mean_scores': mean_scores,
+        'pass_rates': pass_rates,
+        'mean_trend_pct': mean_trend_pct,
+        'pass_rate_trend_pct': pass_rate_trend_pct
+    }
 
 
 @dashboard_bp.route('/')
@@ -227,12 +362,10 @@ def school_dashboard():
         school = current_user.school
         update_school_performance(school.id)
 
-        # Get subject count through proper relationship
-        subject_count = db.session.query(Subject) \
-            .join(AcademicClass) \
-            .filter(AcademicClass.school_id == school.id) \
-            .count()
+        # Get comprehensive performance trend data
+        trend_data = get_performance_trend_data(school.id)
 
+        # Prepare the complete performance dictionary
         performance = {
             'overall': {
                 'mean': get_school_performance(school.id).get('average_score', 0),
@@ -241,10 +374,35 @@ def school_dashboard():
                     school_id=school.id,
                     role='student'
                 ).count(),
-                'total_subjects': subject_count
+                'active_students': User.query.filter_by(
+                    school_id=school.id,
+                    role='student',
+                    is_active=True
+                ).count(),
+                'total_subjects': Subject.query.join(AcademicClass) \
+                    .filter(AcademicClass.school_id == school.id) \
+                    .count(),
+                'core_subjects': Subject.query.join(AcademicClass) \
+                    .filter(
+                    AcademicClass.school_id == school.id,
+                    Subject.is_core == True
+                ).count(),
+                'total_results': ExamResult.query.join(Exam) \
+                    .filter(Exam.school_id == school.id).count()
             },
             'by_class': get_class_performance(school.id),
-            'by_subject': get_subject_performance(school.id)
+            'by_subject': get_subject_performance(school.id),
+            'trends': {
+                'mean_trend': trend_data['mean_trend_pct'],
+                'pass_rate_trend': trend_data['pass_rate_trend_pct'],
+                'exam_periods': trend_data['exam_periods'],
+                'mean_scores': trend_data['mean_scores'],
+                'pass_rates': trend_data['pass_rates']
+            },
+            'grade_distribution': get_grade_distribution(school.id),
+            'teacher_performance': get_teacher_performance_metrics(school.id),
+            'top_students': get_top_students(school.id),
+            'bottom_students': get_bottom_students(school.id)
         }
 
         data = {
@@ -252,8 +410,7 @@ def school_dashboard():
             'performance': performance,
             'exams': get_recent_exams(school.id),
             'current_date': datetime.now().date(),
-            'stats': get_school_stats(school.id),
-            'performance_trend': get_performance_trend(school.id)
+            'stats': get_school_stats(school.id)
         }
 
         logger.debug(f"Dashboard data prepared: {data}")
@@ -278,18 +435,6 @@ def get_school_stats(school_id):
             status='pending'
         ).count()
     }
-
-
-def get_performance_trend(school_id, months=6):
-    """Get performance trend data for charts"""
-    return db.session.query(
-        func.to_char(Exam.exam_date, 'YYYY-MM').label('month'),
-        func.avg(ExamResult.marks).label('avg_marks')
-    ).join(ExamResult) \
-        .filter(Exam.school_id == school_id) \
-        .group_by(func.to_char(Exam.exam_date, 'YYYY-MM')) \
-        .order_by(func.to_char(Exam.exam_date, 'YYYY-MM').desc()) \
-        .limit(months).all()
 
 
 @dashboard_bp.route('/teacher')
@@ -328,8 +473,9 @@ def get_teacher_performance(teacher_id):
         Subject.name,
         func.avg(ExamResult.marks).label('average_score'),
         func.count(ExamResult.id).label('results_count')
-    ).join(ExamResult) \
-        .filter(Subject.teacher_id == teacher_id) \
+    ).join(teacher_subjects, teacher_subjects.c.subject_id == Subject.id) \
+        .join(ExamResult, ExamResult.subject_id == Subject.id) \
+        .filter(teacher_subjects.c.teacher_id == teacher_id) \
         .group_by(Subject.name).all()
 
 
