@@ -11,6 +11,9 @@ db = SQLAlchemy()
 login_manager = LoginManager()
 migrate = Migrate()
 
+# Store file handlers for cleanup
+file_handlers = []
+
 
 def create_app(config_class=None):
     """Application factory function"""
@@ -30,6 +33,20 @@ def create_app(config_class=None):
 
     # Register error handlers
     register_error_handlers(app)
+
+    # Setup cleanup when app context is torn down
+    @app.teardown_appcontext
+    def cleanup_logging(exception=None):
+        """Clean up logging handlers when application context is torn down"""
+        global file_handlers
+        for handler in file_handlers:
+            try:
+                handler.close()
+                app.logger.removeHandler(handler)
+            except Exception as e:
+                if app.debug:
+                    print(f"Error cleaning up handler: {str(e)}")
+        file_handlers = []
 
     return app
 
@@ -81,6 +98,8 @@ def initialize_extensions(app):
 
 def configure_logging(app):
     """Configure application logging"""
+    global file_handlers
+
     if app.debug:
         # Detailed debug logging during development
         logging.basicConfig(level=logging.DEBUG)
@@ -94,13 +113,17 @@ def configure_logging(app):
             'logs/exam_analysis.log',
             maxBytes=10240 * 10,  # 100KB
             backupCount=10,
-            encoding='utf-8'
+            encoding='utf-8',
+            delay=True  # Delay file opening until first log
         )
         file_handler.setFormatter(logging.Formatter(
             '%(asctime)s %(levelname)s: %(message)s '
             '[in %(pathname)s:%(lineno)d]'
         ))
         file_handler.setLevel(logging.INFO)
+
+        # Add to global list for cleanup
+        file_handlers.append(file_handler)
 
         app.logger.addHandler(file_handler)
         app.logger.setLevel(logging.INFO)
@@ -119,10 +142,6 @@ def register_blueprints(app):
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(upload_bp, url_prefix='/upload')
     app.register_blueprint(payment_bp, url_prefix='/payment')
-
-    # API blueprints would be registered here if needed
-    # from app.api import api_bp
-    # app.register_blueprint(api_bp, url_prefix='/api/v1')
 
 
 def register_error_handlers(app):

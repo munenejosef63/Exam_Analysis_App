@@ -1,10 +1,10 @@
-from flask import Blueprint, render_template, flash, redirect, url_for, current_app, make_response
+from flask import Blueprint, render_template, flash, redirect, url_for, make_response
 from flask_login import login_required, current_user
 from app.services.analysis import get_school_performance, get_student_performance, update_school_performance
 from app.models import Exam, School, Payment, Subject, AcademicClass, User, ExamResult
 from app import db
 from datetime import datetime, timedelta
-from sqlalchemy import func, desc, extract
+from sqlalchemy import func, desc, case
 import logging
 
 # Initialize logger
@@ -23,8 +23,9 @@ def get_teacher_subjects(teacher):
     # Add recent results for each subject
     for subject in subjects:
         subject.recent_results = ExamResult.query \
+            .join(Exam, ExamResult.exam_id == Exam.id) \
             .filter_by(subject_id=subject.id) \
-            .order_by(desc(ExamResult.exam_date)) \
+            .order_by(desc(Exam.exam_date)) \
             .limit(5) \
             .all()
     return subjects
@@ -37,6 +38,25 @@ def get_upcoming_exams(school_id, days=30):
         Exam.exam_date >= datetime.now().date(),
         Exam.exam_date <= datetime.now().date() + timedelta(days=days)
     ).order_by(Exam.exam_date.asc()).all()
+
+
+def get_recent_exams(school_id, limit=5):
+    """Get recent exams with performance metrics"""
+    exams = Exam.query.filter_by(school_id=school_id) \
+        .order_by(Exam.exam_date.desc()) \
+        .limit(limit) \
+        .all()
+
+    # Add performance metrics to each exam
+    for exam in exams:
+        exam.mean_score = db.session.query(func.avg(ExamResult.marks)) \
+                              .filter_by(exam_id=exam.id) \
+                              .scalar() or 0
+        exam.pass_rate = db.session.query(
+            func.avg(case((ExamResult.marks >= 50, 1), else_=0))) \
+                             .filter_by(exam_id=exam.id) \
+                             .scalar() * 100 or 0
+    return exams
 
 
 def get_recent_activity(school_id, limit=5):
@@ -83,6 +103,38 @@ def calculate_performance_change(exam_id):
     return round(((current_avg - prev_avg) / prev_avg) * 100, 2) if prev_avg != 0 else 0
 
 
+def get_class_performance(school_id):
+    """Get performance data by class"""
+    results = db.session.query(
+        AcademicClass.name,
+        func.avg(ExamResult.marks).label('mean'),
+        (func.avg(case((ExamResult.marks >= 50, 1), else_=0)) * 100).label('pass_rate')
+    ).join(Exam, ExamResult.exam_id == Exam.id) \
+        .join(Subject) \
+        .join(AcademicClass) \
+        .filter(AcademicClass.school_id == school_id) \
+        .group_by(AcademicClass.name) \
+        .all()
+
+    return {r.name: {'mean': r.mean, 'pass_rate': r.pass_rate} for r in results}
+
+
+def get_subject_performance(school_id):
+    """Get performance data by subject"""
+    results = db.session.query(
+        Subject.name,
+        func.avg(ExamResult.marks).label('mean'),
+        (func.avg(case((ExamResult.marks >= 50, 1), else_=0)) * 100).label('pass_rate')
+    ).join(ExamResult) \
+        .join(Exam) \
+        .join(AcademicClass) \
+        .filter(AcademicClass.school_id == school_id) \
+        .group_by(Subject.name) \
+        .all()
+
+    return {r.name: {'mean': r.mean, 'pass_rate': r.pass_rate} for r in results}
+
+
 @dashboard_bp.route('/')
 @login_required
 def dashboard():
@@ -120,7 +172,6 @@ def admin_dashboard():
         return redirect(url_for('dashboard.dashboard'))
 
     try:
-        # Force fresh data query
         stats = {
             'total_schools': School.query.count(),
             'active_schools': School.query.filter_by(is_active=True).count(),
@@ -141,7 +192,7 @@ def admin_dashboard():
 
 
 def get_revenue_trends():
-    """Get revenue trends with monthly breakdown using PostgreSQL to_char"""
+    """Get revenue trends with monthly breakdown"""
     return db.session.query(
         func.to_char(Payment.payment_date, 'YYYY-MM').label('month'),
         func.sum(Payment.amount).label('amount')
@@ -174,17 +225,38 @@ def school_dashboard():
 
     try:
         school = current_user.school
-        update_school_performance(school.id)  # Ensure fresh performance data
+        update_school_performance(school.id)
+
+        # Get subject count through proper relationship
+        subject_count = db.session.query(Subject) \
+            .join(AcademicClass) \
+            .filter(AcademicClass.school_id == school.id) \
+            .count()
+
+        performance = {
+            'overall': {
+                'mean': get_school_performance(school.id).get('average_score', 0),
+                'pass_rate': get_school_performance(school.id).get('pass_rate', 0),
+                'total_students': User.query.filter_by(
+                    school_id=school.id,
+                    role='student'
+                ).count(),
+                'total_subjects': subject_count
+            },
+            'by_class': get_class_performance(school.id),
+            'by_subject': get_subject_performance(school.id)
+        }
 
         data = {
             'school': school,
-            'performance': get_school_performance(school.id),
-            'upcoming_exams': get_upcoming_exams(school.id),
-            'recent_activity': get_recent_activity(school.id),
+            'performance': performance,
+            'exams': get_recent_exams(school.id),
+            'current_date': datetime.now().date(),
             'stats': get_school_stats(school.id),
             'performance_trend': get_performance_trend(school.id)
         }
 
+        logger.debug(f"Dashboard data prepared: {data}")
         response = make_response(render_template('dashboard_school.html', **data))
         response.headers['Cache-Control'] = 'no-cache'
         return response
@@ -209,15 +281,15 @@ def get_school_stats(school_id):
 
 
 def get_performance_trend(school_id, months=6):
-    """Get performance trend data for charts using PostgreSQL date functions"""
+    """Get performance trend data for charts"""
     return db.session.query(
         func.to_char(Exam.exam_date, 'YYYY-MM').label('month'),
         func.avg(ExamResult.marks).label('avg_marks')
     ).join(ExamResult) \
-     .filter(Exam.school_id == school_id) \
-     .group_by(func.to_char(Exam.exam_date, 'YYYY-MM')) \
-     .order_by(func.to_char(Exam.exam_date, 'YYYY-MM').desc()) \
-     .limit(months).all()
+        .filter(Exam.school_id == school_id) \
+        .group_by(func.to_char(Exam.exam_date, 'YYYY-MM')) \
+        .order_by(func.to_char(Exam.exam_date, 'YYYY-MM').desc()) \
+        .limit(months).all()
 
 
 @dashboard_bp.route('/teacher')
@@ -257,8 +329,8 @@ def get_teacher_performance(teacher_id):
         func.avg(ExamResult.marks).label('average_score'),
         func.count(ExamResult.id).label('results_count')
     ).join(ExamResult) \
-     .filter(Subject.teacher_id == teacher_id) \
-     .group_by(Subject.name).all()
+        .filter(Subject.teacher_id == teacher_id) \
+        .group_by(Subject.name).all()
 
 
 @dashboard_bp.route('/parent')
@@ -272,9 +344,9 @@ def parent_dashboard():
     try:
         if not current_user.students:
             return render_template('dashboard_parent.html',
-                                 students=[],
-                                 performances={},
-                                 upcoming_exams=[])
+                                   students=[],
+                                   performances={},
+                                   upcoming_exams=[])
 
         performances = {
             student.id: get_student_performance(student.id, force_refresh=True)
@@ -314,8 +386,8 @@ def get_student_trends(students):
             Exam.name,
             ExamResult.marks
         ).join(Exam) \
-         .filter(ExamResult.student_id == student.id) \
-         .order_by(Exam.exam_date.desc()) \
-         .limit(5).all()
+            .filter(ExamResult.student_id == student.id) \
+            .order_by(Exam.exam_date.desc()) \
+            .limit(5).all()
         for student in students
     }

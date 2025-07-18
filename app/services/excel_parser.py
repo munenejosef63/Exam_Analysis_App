@@ -12,7 +12,8 @@ from app.models import (
     ExamResult,
     AcademicClass,
     StudentContact,
-    School
+    School,
+    User
 )
 from app.services.grading import calculate_grade
 
@@ -258,9 +259,11 @@ class ExamParser:
     def _process_student_record(self, admission_no, student_data, contact_data):
         """Process individual student record with error handling"""
         try:
+            # First try to find existing student
             student = Student.query.filter_by(
-                admission_number=admission_no,
-                school_id=self.school_id
+                admission_number=admission_no
+            ).join(AcademicClass).filter(
+                AcademicClass.school_id == self.school_id
             ).first()
 
             if not student:
@@ -279,9 +282,11 @@ class ExamParser:
     def _create_student(self, admission_no, student_data):
         """Create new student record with validation"""
         try:
+            # Validate required fields
             if not student_data.get('class_name'):
                 raise ValueError("Class name is required")
 
+            # Find or create academic class
             class_ = AcademicClass.query.filter_by(
                 name=student_data['class_name'],
                 school_id=self.school_id
@@ -296,11 +301,11 @@ class ExamParser:
                 db.session.add(class_)
                 db.session.flush()
 
+            # Create student with proper academic_class_id
             student = Student(
                 admission_number=admission_no,
                 name=student_data['student_name'],
-                class_id=class_.id,
-                school_id=self.school_id,
+                academic_class_id=class_.id,  # Using correct field name
                 comm_ref_id=f"CONTACT_{admission_no}"
             )
             db.session.add(student)
@@ -332,13 +337,13 @@ class ExamParser:
 
             subject = Subject.query.filter_by(
                 name=result_data['subject'],
-                class_id=student.class_id
+                academic_class_id=student.academic_class_id
             ).first()
 
             if not subject:
                 subject = Subject(
                     name=result_data['subject'],
-                    class_id=student.class_id,
+                    academic_class_id=student.academic_class_id,
                     has_paper1=True if result_data.get('paper') == 1 else False,
                     has_paper2=True if result_data.get('paper') == 2 else False
                 )
