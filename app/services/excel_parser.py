@@ -3,6 +3,7 @@ from datetime import datetime
 import phonenumbers
 from email_validator import validate_email, EmailNotValidError
 from flask import current_app
+from flask_login import current_user
 import logging
 from app.models import (
     db,
@@ -16,6 +17,7 @@ from app.models import (
     User
 )
 from app.services.grading import calculate_grade
+from sqlalchemy.exc import IntegrityError
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -30,15 +32,21 @@ REQUIRED_SHEETS = {
 
 def process_exam_upload(file_stream):
     """
-    Process exam uploads with improved error handling
+    Process exam uploads with improved error handling and dynamic school assignment
     Returns dict with processed data statistics
     """
     try:
+        if not current_user.is_authenticated:
+            raise ValueError("User must be logged in to upload exams")
+
+        if not current_user.school_id:
+            raise ValueError("User is not associated with any school")
+
         parser = ExamParser()
         success, message = parser.parse_excel(
             file_stream=file_stream,
-            school_id=1,  # Should be replaced with actual school_id from session
-            uploader_id=1  # Should be replaced with actual user_id from session
+            school_id=current_user.school_id,
+            uploader_id=current_user.id
         )
 
         if not success:
@@ -46,9 +54,12 @@ def process_exam_upload(file_stream):
 
         return {
             'status': 'success',
-            'students': Student.query.count(),
-            'results': ExamResult.query.count(),
-            'message': message
+            'students': Student.query.filter_by(school_id=current_user.school_id).count(),
+            'results': ExamResult.query.join(Exam).filter(
+                Exam.school_id == current_user.school_id
+            ).count(),
+            'message': message,
+            'exam_id': parser.current_exam.id if parser.current_exam else None
         }
 
     except Exception as e:
@@ -64,6 +75,7 @@ class ExamParser:
         self.school_id = None
         self.uploader_id = None
         self.current_exam = None
+        self.current_school = None
 
     def parse_excel(self, file_stream, school_id, uploader_id):
         """Main method to parse the complete Excel template"""
@@ -71,6 +83,11 @@ class ExamParser:
         self.uploader_id = uploader_id
 
         try:
+            # Validate school exists
+            self.current_school = School.query.get(self.school_id)
+            if not self.current_school:
+                raise ValueError(f"School with ID {self.school_id} does not exist")
+
             xls = pd.ExcelFile(file_stream)
             self._validate_sheet_structure(xls)
 
@@ -81,16 +98,25 @@ class ExamParser:
 
             self.current_exam = self._create_exam_record(exam_data)
 
+            processed_students = 0
             for admission_no, data in results.items():
-                self._process_student_record(
-                    admission_no,
-                    data,
-                    contacts_data.get(admission_no, {})
-                )
+                try:
+                    self._process_student_record(
+                        admission_no,
+                        data,
+                        contacts_data.get(admission_no, {})
+                    )
+                    processed_students += 1
+                except Exception as e:
+                    logger.warning(f"Skipped student {admission_no}: {str(e)}")
+                    continue
 
             db.session.commit()
-            logger.info(f"Successfully uploaded exam results for exam ID: {self.current_exam.id}")
-            return True, "Exam results uploaded successfully"
+            logger.info(
+                f"Successfully uploaded exam results for {processed_students} students "
+                f"to exam ID: {self.current_exam.id} in school ID: {self.school_id}"
+            )
+            return True, f"Processed {processed_students} student records successfully"
 
         except Exception as e:
             db.session.rollback()
@@ -218,17 +244,6 @@ class ExamParser:
             logger.error(f"Error parsing results sheet: {str(e)}")
             raise ValueError(f"Invalid results sheet: {str(e)}")
 
-    def _parse_subject_column(self, column_name, subjects_config):
-        """Extract subject name and paper number from column with validation"""
-        try:
-            if '_Paper' in column_name:
-                subject_name, paper = column_name.split('_Paper')
-                return subject_name.strip(), int(paper.strip())
-            return column_name.strip(), None
-        except Exception as e:
-            logger.warning(f"Invalid subject column format: {column_name}")
-            raise ValueError(f"Invalid subject column: {column_name}")
-
     def _create_exam_record(self, exam_data):
         """Create the exam record in database with validation"""
         try:
@@ -250,120 +265,115 @@ class ExamParser:
             )
             db.session.add(exam)
             db.session.flush()
-            logger.info(f"Created exam record: {exam.name} (ID: {exam.id})")
+            logger.info(f"Created exam record: {exam.name} (ID: {exam.id}) for school ID: {self.school_id}")
             return exam
+        except IntegrityError as e:
+            raise ValueError(f"Database integrity error creating exam: {str(e)}")
         except Exception as e:
             logger.error(f"Error creating exam record: {str(e)}")
             raise ValueError(f"Failed to create exam record: {str(e)}")
 
     def _process_student_record(self, admission_no, student_data, contact_data):
         """Process individual student record with error handling"""
-        try:
-            # First try to find existing student
-            student = Student.query.filter_by(
-                admission_number=admission_no
-            ).join(AcademicClass).filter(
-                AcademicClass.school_id == self.school_id
-            ).first()
+        # First try to find existing student in the same school
+        student = Student.query.filter_by(
+            admission_number=admission_no
+        ).join(AcademicClass).filter(
+            AcademicClass.school_id == self.school_id
+        ).first()
 
-            if not student:
-                student = self._create_student(admission_no, student_data)
+        if not student:
+            student = self._create_student(admission_no, student_data)
 
-            if contact_data:
-                self._update_contact_info(student, contact_data)
+        if contact_data:
+            self._update_contact_info(student, contact_data)
 
-            for result in student_data['results']:
-                self._create_exam_result(student, result)
-
-        except Exception as e:
-            logger.error(f"Error processing student {admission_no}: {str(e)}")
-            raise ValueError(f"Failed to process student {admission_no}: {str(e)}")
+        for result in student_data['results']:
+            self._create_exam_result(student, result)
 
     def _create_student(self, admission_no, student_data):
         """Create new student record with validation"""
-        try:
-            # Validate required fields
-            if not student_data.get('class_name'):
-                raise ValueError("Class name is required")
+        if not student_data.get('class_name'):
+            raise ValueError("Class name is required")
 
-            # Find or create academic class
-            class_ = AcademicClass.query.filter_by(
+        # Find or create academic class within the same school
+        class_ = AcademicClass.query.filter_by(
+            name=student_data['class_name'],
+            school_id=self.school_id
+        ).first()
+
+        if not class_:
+            class_ = AcademicClass(
                 name=student_data['class_name'],
+                stream=student_data.get('stream', ''),
                 school_id=self.school_id
-            ).first()
-
-            if not class_:
-                class_ = AcademicClass(
-                    name=student_data['class_name'],
-                    stream=student_data.get('stream', ''),
-                    school_id=self.school_id
-                )
-                db.session.add(class_)
-                db.session.flush()
-
-            # Create student with proper academic_class_id
-            student = Student(
-                admission_number=admission_no,
-                name=student_data['student_name'],
-                academic_class_id=class_.id,  # Using correct field name
-                comm_ref_id=f"CONTACT_{admission_no}"
             )
-            db.session.add(student)
+            db.session.add(class_)
             db.session.flush()
-            logger.info(f"Created new student: {student.name} ({admission_no})")
-            return student
-        except Exception as e:
-            logger.error(f"Error creating student {admission_no}: {str(e)}")
-            raise ValueError(f"Failed to create student record: {str(e)}")
+
+        student = Student(
+            admission_number=admission_no,
+            name=student_data['student_name'],
+            academic_class_id=class_.id,
+            comm_ref_id=f"{self.school_id}_{admission_no}"
+        )
+        db.session.add(student)
+        db.session.flush()
+        logger.info(f"Created new student: {student.name} ({admission_no}) in school ID: {self.school_id}")
+        return student
 
     def _update_contact_info(self, student, contact_data):
         """Update or create student contact information"""
-        try:
-            if not student.contacts:
-                student.contacts = StudentContact()
+        if not student.contacts:
+            student.contacts = StudentContact()
 
-            for field, value in contact_data.items():
-                if value is not None:
-                    setattr(student.contacts, field, value)
-        except Exception as e:
-            logger.error(f"Error updating contact info for student {student.admission_number}: {str(e)}")
-            raise ValueError(f"Failed to update contact info: {str(e)}")
+        for field, value in contact_data.items():
+            if value is not None:
+                setattr(student.contacts, field, value)
 
     def _create_exam_result(self, student, result_data):
         """Create exam result record with validation"""
-        try:
-            if not result_data.get('subject'):
-                raise ValueError("Subject name is required")
+        if not result_data.get('subject'):
+            raise ValueError("Subject name is required")
 
-            subject = Subject.query.filter_by(
+        subject = Subject.query.filter_by(
+            name=result_data['subject'],
+            academic_class_id=student.academic_class_id
+        ).first()
+
+        if not subject:
+            subject = Subject(
                 name=result_data['subject'],
-                academic_class_id=student.academic_class_id
-            ).first()
-
-            if not subject:
-                subject = Subject(
-                    name=result_data['subject'],
-                    academic_class_id=student.academic_class_id,
-                    has_paper1=True if result_data.get('paper') == 1 else False,
-                    has_paper2=True if result_data.get('paper') == 2 else False
-                )
-                db.session.add(subject)
-                db.session.flush()
-
-            exam_result = ExamResult(
-                exam_id=self.current_exam.id,
-                student_id=student.id,
-                subject_id=subject.id,
-                marks=float(result_data['marks']),
-                grade=calculate_grade(float(result_data['marks'])),
-                paper_number=result_data.get('paper'),
-                remark=result_data.get('remarks', ''),
-                position=0
+                academic_class_id=student.academic_class_id,
+                has_paper1=True if result_data.get('paper') == 1 else False,
+                has_paper2=True if result_data.get('paper') == 2 else False
             )
-            db.session.add(exam_result)
+            db.session.add(subject)
+            db.session.flush()
+
+        exam_result = ExamResult(
+            exam_id=self.current_exam.id,
+            student_id=student.id,
+            subject_id=subject.id,
+            marks=float(result_data['marks']),
+            grade=calculate_grade(float(result_data['marks'])),
+            paper_number=result_data.get('paper'),
+            remark=result_data.get('remarks', ''),
+            position=0
+        )
+        db.session.add(exam_result)
+
+    # Helper methods remain the same...
+    def _parse_subject_column(self, column_name, subjects_config):
+        """Extract subject name and paper number from column with validation"""
+        try:
+            if '_Paper' in column_name:
+                subject_name, paper = column_name.split('_Paper')
+                return subject_name.strip(), int(paper.strip())
+            return column_name.strip(), None
         except Exception as e:
-            logger.error(f"Error creating exam result for student {student.admission_number}: {str(e)}")
-            raise ValueError(f"Failed to create exam result: {str(e)}")
+            logger.warning(f"Invalid subject column format: {column_name}")
+            raise ValueError(f"Invalid subject column: {column_name}")
 
     def _validate_email(self, email):
         """Validate and normalize email address"""
@@ -390,7 +400,11 @@ class ExamParser:
             return None
 
 
-def parse_excel(file_stream, exam_name, exam_date, school_id, uploader_id):
+def parse_excel(file_stream, exam_name=None, exam_date=None, school_id=None, uploader_id=None):
     """Legacy wrapper for backward compatibility"""
     parser = ExamParser()
-    return parser.parse_excel(file_stream, school_id, uploader_id)
+    return parser.parse_excel(
+        file_stream,
+        school_id or current_user.school_id,
+        uploader_id or current_user.id
+    )

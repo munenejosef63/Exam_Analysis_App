@@ -56,17 +56,12 @@ def login():
         user = User.query.filter_by(email=form.email.data.lower().strip()).first()
 
         if not user or not check_password_hash(user.password_hash, form.password.data):
-            if user:
-                user.failed_login_attempts += 1
-                user.last_failed_login = datetime.datetime.utcnow()
-                db.session.commit()
-                log_activity(f"Failed login for user {user.id} (attempt {user.failed_login_attempts})", "warning")
+            log_activity(f"Failed login attempt for email: {form.email.data}", "warning")
             flash('Invalid email or password', 'danger')
             return render_template('login.html', form=form)
 
         login_user(user, remember=form.remember_me.data)
         user.last_login = datetime.datetime.utcnow()
-        user.failed_login_attempts = 0
         db.session.commit()
 
         log_activity(f"User {user.id} logged in successfully")

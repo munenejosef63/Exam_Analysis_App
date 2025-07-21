@@ -3,10 +3,11 @@ from flask_login import login_required, current_user
 from app.services.analysis import get_school_performance, get_student_performance, update_school_performance
 from app.models import Exam, School, Payment, Subject, AcademicClass, User, ExamResult, teacher_subjects
 from app import db
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from sqlalchemy import func, desc, case, and_
 import logging
 from sqlalchemy import distinct
+
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -360,16 +361,35 @@ def school_dashboard():
 
     try:
         school = current_user.school
+
+        # Handle subscription expiry with proper datetime/date conversion
+        if school.subscription_expiry is None:
+            school.subscription_expiry = datetime(1900, 1, 1)  # Using datetime for consistency
+            db.session.commit()
+            logger.warning(f"School {school.id} had null subscription_expiry - set to default")
+        elif isinstance(school.subscription_expiry, date):
+            school.subscription_expiry = datetime.combine(school.subscription_expiry, datetime.min.time())
+            db.session.commit()
+
         update_school_performance(school.id)
 
-        # Get comprehensive performance trend data
-        trend_data = get_performance_trend_data(school.id)
+        # Get comprehensive performance trend data with None check
+        trend_data = get_performance_trend_data(school.id) or {
+            'mean_trend_pct': 0,
+            'pass_rate_trend_pct': 0,
+            'exam_periods': [],
+            'mean_scores': [],
+            'pass_rates': []
+        }
+
+        # Get school performance with proper None handling
+        school_performance = get_school_performance(school.id) or {}
 
         # Prepare the complete performance dictionary
         performance = {
             'overall': {
-                'mean': get_school_performance(school.id).get('average_score', 0),
-                'pass_rate': get_school_performance(school.id).get('pass_rate', 0),
+                'mean': school_performance.get('mean', 0),
+                'pass_rate': school_performance.get('pass_rate', 0),
                 'total_students': User.query.filter_by(
                     school_id=school.id,
                     role='student'
@@ -390,37 +410,50 @@ def school_dashboard():
                 'total_results': ExamResult.query.join(Exam) \
                     .filter(Exam.school_id == school.id).count()
             },
-            'by_class': get_class_performance(school.id),
-            'by_subject': get_subject_performance(school.id),
+            'by_class': get_class_performance(school.id) or {},
+            'by_subject': get_subject_performance(school.id) or {},
             'trends': {
-                'mean_trend': trend_data['mean_trend_pct'],
-                'pass_rate_trend': trend_data['pass_rate_trend_pct'],
-                'exam_periods': trend_data['exam_periods'],
-                'mean_scores': trend_data['mean_scores'],
-                'pass_rates': trend_data['pass_rates']
+                'mean_trend': trend_data.get('mean_trend_pct', 0),
+                'pass_rate_trend': trend_data.get('pass_rate_trend_pct', 0),
+                'exam_periods': trend_data.get('exam_periods', []),
+                'mean_scores': trend_data.get('mean_scores', []),
+                'pass_rates': trend_data.get('pass_rates', [])
             },
-            'grade_distribution': get_grade_distribution(school.id),
-            'teacher_performance': get_teacher_performance_metrics(school.id),
-            'top_students': get_top_students(school.id),
-            'bottom_students': get_bottom_students(school.id)
+            'grade_distribution': get_grade_distribution(school.id) or {},
+            'teacher_performance': get_teacher_performance_metrics(school.id) or [],
+            'top_students': get_top_students(school.id) or [],
+            'bottom_students': get_bottom_students(school.id) or []
         }
+
+        # Get additional data with error handling
+        try:
+            exams = get_recent_exams(school.id)
+            stats = get_school_stats(school.id)
+        except Exception as e:
+            logger.warning(f"Error fetching additional dashboard data: {str(e)}")
+            exams = []
+            stats = {}
+
+        # Prepare data for template with consistent datetime types
+        current_date = datetime.now()  # Using datetime consistently
 
         data = {
             'school': school,
             'performance': performance,
-            'exams': get_recent_exams(school.id),
-            'current_date': datetime.now().date(),
-            'stats': get_school_stats(school.id)
+            'exams': exams,
+            'current_date': current_date,  # Now always datetime
+            'current_date_date': current_date.date(),  # Also provide date version if needed
+            'stats': stats or {}
         }
 
-        logger.debug(f"Dashboard data prepared: {data}")
+        logger.debug(f"Dashboard data prepared for school {school.id}")
         response = make_response(render_template('dashboard_school.html', **data))
         response.headers['Cache-Control'] = 'no-cache'
         return response
 
     except Exception as e:
-        logger.error(f"School dashboard error: {str(e)}", exc_info=True)
-        flash('Error loading school dashboard', 'danger')
+        logger.error(f"School dashboard error for user {current_user.id}: {str(e)}", exc_info=True)
+        flash('Error loading school dashboard. Please try again later.', 'danger')
         return redirect(url_for('dashboard.dashboard'))
 
 

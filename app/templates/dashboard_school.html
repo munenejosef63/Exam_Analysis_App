@@ -31,6 +31,9 @@
         height: 300px;
         width: 100%;
     }
+    .badge-pill {
+        min-width: 60px;
+    }
 </style>
 {% endblock %}
 
@@ -38,7 +41,7 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>{{ school.name }} Dashboard</h2>
-        {% if not school.is_active or school.subscription_expiry < current_date %}
+        {% if not school.is_active or school.subscription_expiry is none or school.subscription_expiry < current_date %}
             <a href="{{ url_for('payment.payment') }}" class="btn btn-danger">Renew Subscription</a>
         {% endif %}
     </div>
@@ -46,14 +49,24 @@
     {% if performance %}
     <!-- Performance Summary Cards -->
     <div class="row mb-4">
+        <!-- Mean Score Card -->
         <div class="col-md-3 mb-3">
             <div class="card performance-card text-white bg-primary h-100">
                 <div class="card-body text-center">
                     <h5 class="card-title">Mean Score</h5>
-                    <p class="card-text display-4">{{ "%.1f"|format(performance.overall.mean) }}</p>
-                    {% if performance.trends.mean_trend %}
-                        <span class="trend-indicator {% if performance.trends.mean_trend > 0 %}trend-up{% elif performance.trends.mean_trend < 0 %}trend-down{% else %}trend-neutral{% endif %}">
-                            {% if performance.trends.mean_trend > 0 %}&uarr;{% elif performance.trends.mean_trend < 0 %}&darr;{% else %}&rarr;{% endif %}
+                    <p class="card-text display-4">
+                        {{ "%.1f"|format(performance.overall.mean|default(0)) }}
+                    </p>
+                    {% if performance.trends.mean_trend is not none %}
+                        <span class="trend-indicator
+                            {% if performance.trends.mean_trend > 0 %}trend-up
+                            {% elif performance.trends.mean_trend < 0 %}trend-down
+                            {% else %}trend-neutral
+                            {% endif %}">
+                            {% if performance.trends.mean_trend > 0 %}&uarr;
+                            {% elif performance.trends.mean_trend < 0 %}&darr;
+                            {% else %}&rarr;
+                            {% endif %}
                             {{ "%.1f"|format(performance.trends.mean_trend|abs) }}%
                         </span>
                     {% endif %}
@@ -61,14 +74,24 @@
             </div>
         </div>
 
+        <!-- Pass Rate Card -->
         <div class="col-md-3 mb-3">
             <div class="card performance-card text-white bg-success h-100">
                 <div class="card-body text-center">
                     <h5 class="card-title">Pass Rate</h5>
-                    <p class="card-text display-4">{{ "%.1f"|format(performance.overall.pass_rate) }}%</p>
-                    {% if performance.trends.pass_rate_trend %}
-                        <span class="trend-indicator {% if performance.trends.pass_rate_trend > 0 %}trend-up{% elif performance.trends.pass_rate_trend < 0 %}trend-down{% else %}trend-neutral{% endif %}">
-                            {% if performance.trends.pass_rate_trend > 0 %}&uarr;{% elif performance.trends.pass_rate_trend < 0 %}&darr;{% else %}&rarr;{% endif %}
+                    <p class="card-text display-4">
+                        {{ "%.1f"|format(performance.overall.pass_rate|default(0)) }}%
+                    </p>
+                    {% if performance.trends.pass_rate_trend is not none %}
+                        <span class="trend-indicator
+                            {% if performance.trends.pass_rate_trend > 0 %}trend-up
+                            {% elif performance.trends.pass_rate_trend < 0 %}trend-down
+                            {% else %}trend-neutral
+                            {% endif %}">
+                            {% if performance.trends.pass_rate_trend > 0 %}&uarr;
+                            {% elif performance.trends.pass_rate_trend < 0 %}&darr;
+                            {% else %}&rarr;
+                            {% endif %}
                             {{ "%.1f"|format(performance.trends.pass_rate_trend|abs) }}%
                         </span>
                     {% endif %}
@@ -76,22 +99,32 @@
             </div>
         </div>
 
+        <!-- Students Card -->
         <div class="col-md-3 mb-3">
             <div class="card performance-card text-white bg-info h-100">
                 <div class="card-body text-center">
                     <h5 class="card-title">Students</h5>
-                    <p class="card-text display-4">{{ performance.overall.total_students }}</p>
-                    <small class="text-white-50">Active: {{ performance.overall.active_students }}</small>
+                    <p class="card-text display-4">
+                        {{ performance.overall.total_students|default(0) }}
+                    </p>
+                    <small class="text-white-50">
+                        Active: {{ performance.overall.active_students|default(0) }}
+                    </small>
                 </div>
             </div>
         </div>
 
+        <!-- Subjects Card -->
         <div class="col-md-3 mb-3">
             <div class="card performance-card text-white bg-warning h-100">
                 <div class="card-body text-center">
                     <h5 class="card-title">Subjects</h5>
-                    <p class="card-text display-4">{{ performance.overall.total_subjects }}</p>
-                    <small class="text-white-50">Core: {{ performance.overall.core_subjects }}</small>
+                    <p class="card-text display-4">
+                        {{ performance.overall.total_subjects|default(0) }}
+                    </p>
+                    <small class="text-white-50">
+                        Core: {{ performance.overall.core_subjects|default(0) }}
+                    </small>
                 </div>
             </div>
         </div>
@@ -99,6 +132,7 @@
 
     <!-- Grade Distribution and Teacher Performance -->
     <div class="row mb-4">
+        <!-- Grade Distribution -->
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
@@ -110,14 +144,17 @@
                         <div class="col-md-4 mb-3">
                             <div class="d-flex justify-content-between">
                                 <span>Grade {{ grade }}</span>
-                                <span>{{ count }} ({{ "%.1f"|format((count/performance.overall.total_results)*100) }}%)</span>
+                                <span>
+                                    {{ count }}
+                                    ({{ "%.1f"|format((count/performance.overall.total_results)*100 if performance.overall.total_results else 0) }}%)
+                                </span>
                             </div>
                             <div class="progress">
                                 <div class="progress-bar" role="progressbar"
-                                     style="width: {{ (count/performance.overall.total_results)*100 }}%"
+                                     style="width: {{ (count/performance.overall.total_results)*100 if performance.overall.total_results else 0 }}%"
                                      aria-valuenow="{{ count }}"
                                      aria-valuemin="0"
-                                     aria-valuemax="{{ performance.overall.total_results }}">
+                                     aria-valuemax="{{ performance.overall.total_results|default(1) }}">
                                 </div>
                             </div>
                         </div>
@@ -127,6 +164,7 @@
             </div>
         </div>
 
+        <!-- Teacher Performance -->
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
@@ -148,8 +186,12 @@
                                 <tr>
                                     <td>{{ teacher.name }}</td>
                                     <td>{{ teacher.subject_count }}</td>
-                                    <td>{{ "%.1f"|format(teacher.avg_score) }}</td>
-                                    <td>{{ "%.1f"|format(teacher.pass_rate) }}%</td>
+                                    <td>{{ "%.1f"|format(teacher.avg_score|default(0)) }}</td>
+                                    <td>{{ "%.1f"|format(teacher.pass_rate|default(0)) }}%</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center">No teacher data available</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -162,6 +204,7 @@
 
     <!-- Performance Charts -->
     <div class="row mb-4">
+        <!-- Class Performance -->
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
@@ -175,6 +218,7 @@
             </div>
         </div>
 
+        <!-- Subject Performance -->
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
@@ -191,6 +235,7 @@
 
     <!-- Trend Analysis and Student Performance -->
     <div class="row mb-4">
+        <!-- Performance Trend -->
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
@@ -204,6 +249,7 @@
             </div>
         </div>
 
+        <!-- Top & Bottom Students -->
         <div class="col-md-6">
             <div class="card h-100">
                 <div class="card-header">
@@ -217,8 +263,12 @@
                                 {% for student in performance.top_students %}
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
                                     {{ student.name }}
-                                    <span class="badge badge-primary badge-pill">{{ "%.1f"|format(student.avg_score) }}</span>
+                                    <span class="badge badge-primary badge-pill">
+                                        {{ "%.1f"|format(student.avg_score|default(0)) }}
+                                    </span>
                                 </li>
+                                {% else %}
+                                <li class="list-group-item text-center">No data available</li>
                                 {% endfor %}
                             </ul>
                         </div>
@@ -228,8 +278,12 @@
                                 {% for student in performance.bottom_students %}
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
                                     {{ student.name }}
-                                    <span class="badge badge-danger badge-pill">{{ "%.1f"|format(student.avg_score) }}</span>
+                                    <span class="badge badge-danger badge-pill">
+                                        {{ "%.1f"|format(student.avg_score|default(0)) }}
+                                    </span>
                                 </li>
+                                {% else %}
+                                <li class="list-group-item text-center">No data available</li>
                                 {% endfor %}
                             </ul>
                         </div>
@@ -262,17 +316,23 @@
                         <tr>
                             <td>{{ exam.name }}</td>
                             <td>{{ exam.exam_date.strftime('%Y-%m-%d') }}</td>
-                            <td>{{ "%.1f"|format(exam.mean_score) if exam.mean_score else 'N/A' }}</td>
-                            <td>{{ "%.1f"|format(exam.pass_rate) }}%</td>
+                            <td>{{ "%.1f"|format(exam.mean_score) if exam.mean_score is not none else 'N/A' }}</td>
+                            <td>{{ "%.1f"|format(exam.pass_rate) if exam.pass_rate is not none else 'N/A' }}%</td>
                             <td>{{ exam.student_count }}</td>
                             <td>
-                                {% if exam.trend %}
+                                {% if exam.trend is not none %}
                                     <span class="{% if exam.trend > 0 %}text-success{% elif exam.trend < 0 %}text-danger{% else %}text-muted{% endif %}">
                                         {% if exam.trend > 0 %}&uarr;{% elif exam.trend < 0 %}&darr;{% else %}&rarr;{% endif %}
                                         {{ "%.1f"|format(exam.trend|abs) }}%
                                     </span>
+                                {% else %}
+                                    N/A
                                 {% endif %}
                             </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center">No recent exams found</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -292,188 +352,159 @@
 {% if performance %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    // Class Performance Chart
     document.addEventListener('DOMContentLoaded', function() {
+        // Class Performance Chart
         const classCtx = document.getElementById('classPerformanceChart').getContext('2d');
         const classLabels = {{ performance.by_class.keys()|list|tojson }};
-        const classMeans = {{ performance.by_class.values()|map(attribute='mean')|list|tojson }};
-        const classPassRates = {{ performance.by_class.values()|map(attribute='pass_rate')|list|tojson }};
+        const classMeans = {{ performance.by_class.values()|map(attribute='mean')|list|default([])|tojson }};
+        const classPassRates = {{ performance.by_class.values()|map(attribute='pass_rate')|list|default([])|tojson }};
 
-        new Chart(classCtx, {
-            type: 'bar',
-            data: {
-                labels: classLabels,
-                datasets: [
-                    {
-                        label: 'Mean Score',
-                        data: classMeans,
-                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 1,
-                        yAxisID: 'y'
-                    },
-                    {
-                        label: 'Pass Rate %',
-                        data: classPassRates,
-                        backgroundColor: 'rgba(75, 192, 192, 0.7)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 1,
-                        type: 'line',
-                        yAxisID: 'y1'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        title: {
-                            display: true,
-                            text: 'Mean Score'
-                        }
-                    },
-                    y1: {
-                        beginAtZero: true,
-                        max: 100,
-                        position: 'right',
-                        title: {
-                            display: true,
-                            text: 'Pass Rate %'
+        if (classLabels.length > 0 && classMeans.length > 0) {
+            new Chart(classCtx, {
+                type: 'bar',
+                data: {
+                    labels: classLabels,
+                    datasets: [
+                        {
+                            label: 'Mean Score',
+                            data: classMeans,
+                            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1,
+                            yAxisID: 'y'
                         },
-                        grid: {
-                            drawOnChartArea: false
+                        {
+                            label: 'Pass Rate %',
+                            data: classPassRates,
+                            backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1,
+                            type: 'line',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: 'Mean Score' }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            max: 100,
+                            position: 'right',
+                            title: { display: true, text: 'Pass Rate %' },
+                            grid: { drawOnChartArea: false }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
 
         // Subject Performance Chart
         const subjectCtx = document.getElementById('subjectPerformanceChart').getContext('2d');
         const subjectLabels = {{ performance.by_subject.keys()|list|tojson }};
-        const subjectMeans = {{ performance.by_subject.values()|map(attribute='mean')|list|tojson }};
-        const subjectPassRates = {{ performance.by_subject.values()|map(attribute='pass_rate')|list|tojson }};
+        const subjectMeans = {{ performance.by_subject.values()|map(attribute='mean')|list|default([])|tojson }};
+        const subjectPassRates = {{ performance.by_subject.values()|map(attribute='pass_rate')|list|default([])|tojson }};
 
-        new Chart(subjectCtx, {
-            type: 'bar',
-            data: {
-                labels: subjectLabels,
-                datasets: [
-                    {
-                        label: 'Mean Score',
-                        data: subjectMeans,
-                        backgroundColor: 'rgba(75, 192, 192, 0.7)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 1,
-                        yAxisID: 'y'
-                    },
-                    {
-                        label: 'Pass Rate %',
-                        data: subjectPassRates,
-                        backgroundColor: 'rgba(153, 102, 255, 0.7)',
-                        borderColor: 'rgba(153, 102, 255, 1)',
-                        borderWidth: 1,
-                        type: 'line',
-                        yAxisID: 'y1'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100,
-                        title: {
-                            display: true,
-                            text: 'Mean Score'
-                        }
-                    },
-                    y1: {
-                        beginAtZero: true,
-                        max: 100,
-                        position: 'right',
-                        title: {
-                            display: true,
-                            text: 'Pass Rate %'
+        if (subjectLabels.length > 0 && subjectMeans.length > 0) {
+            new Chart(subjectCtx, {
+                type: 'bar',
+                data: {
+                    labels: subjectLabels,
+                    datasets: [
+                        {
+                            label: 'Mean Score',
+                            data: subjectMeans,
+                            backgroundColor: 'rgba(75, 192, 192, 0.7)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1,
+                            yAxisID: 'y'
                         },
-                        grid: {
-                            drawOnChartArea: false
+                        {
+                            label: 'Pass Rate %',
+                            data: subjectPassRates,
+                            backgroundColor: 'rgba(153, 102, 255, 0.7)',
+                            borderColor: 'rgba(153, 102, 255, 1)',
+                            borderWidth: 1,
+                            type: 'line',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: 'Mean Score' }
+                        },
+                        y1: {
+                            beginAtZero: true,
+                            max: 100,
+                            position: 'right',
+                            title: { display: true, text: 'Pass Rate %' },
+                            grid: { drawOnChartArea: false }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
 
         // Performance Trend Chart
         const trendCtx = document.getElementById('performanceTrendChart').getContext('2d');
-        const trendLabels = {{ performance.trends.exam_periods|list|tojson }};
-        const trendMeans = {{ performance.trends.mean_scores|list|tojson }};
-        const trendPassRates = {{ performance.trends.pass_rates|list|tojson }};
+        const trendLabels = {{ performance.trends.exam_periods|list|default([])|tojson }};
+        const trendMeans = {{ performance.trends.mean_scores|list|default([])|tojson }};
+        const trendPassRates = {{ performance.trends.pass_rates|list|default([])|tojson }};
 
-        new Chart(trendCtx, {
-            type: 'line',
-            data: {
-                labels: trendLabels,
-                datasets: [
-                    {
-                        label: 'Mean Score',
-                        data: trendMeans,
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4
-                    },
-                    {
-                        label: 'Pass Rate %',
-                        data: trendPassRates,
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    }
+        if (trendLabels.length > 0 && trendMeans.length > 0) {
+            new Chart(trendCtx, {
+                type: 'line',
+                data: {
+                    labels: trendLabels,
+                    datasets: [
+                        {
+                            label: 'Mean Score',
+                            data: trendMeans,
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Pass Rate %',
+                            data: trendPassRates,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        max: 100
-                    }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: { y: { beginAtZero: true, max: 100 } }
                 }
-            }
-        });
+            });
+        }
     });
 </script>
 {% endif %}
