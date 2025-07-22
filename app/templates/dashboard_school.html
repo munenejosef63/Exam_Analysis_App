@@ -55,7 +55,7 @@
                 <div class="card-body text-center">
                     <h5 class="card-title">Mean Score</h5>
                     <p class="card-text display-4">
-                        {{ "%.1f"|format(performance.overall.mean|default(0)) }}
+                        {{ "%.1f"|format(performance['overall']['mean']|default(0)) }}
                     </p>
                     {% if performance.trends.mean_trend is not none %}
                         <span class="trend-indicator

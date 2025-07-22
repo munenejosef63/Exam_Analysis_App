@@ -386,10 +386,10 @@ def school_dashboard():
         school_performance = get_school_performance(school.id) or {}
 
         # Prepare the complete performance dictionary
-        performance = {
+        performance = get_school_performance(school.id) or {
             'overall': {
-                'mean': school_performance.get('mean', 0),
-                'pass_rate': school_performance.get('pass_rate', 0),
+                'mean': 0,
+                'pass_rate': 0,
                 'total_students': User.query.filter_by(
                     school_id=school.id,
                     role='student'
