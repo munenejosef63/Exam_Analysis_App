@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 from sqlalchemy import func, case, and_, distinct, or_
 import statistics
+import json
 
 
 def update_school_performance(school_id):
@@ -21,10 +22,10 @@ def update_school_performance(school_id):
             func.count(distinct(ExamResult.subject_id)).label('total_subjects'),
             func.count(distinct(ExamResult.exam_id)).label('total_exams')
         )
-        .select_from(ExamResult)
-        .join(Exam, ExamResult.exam_id == Exam.id)
-        .filter(Exam.school_id == school_id)
-        .first())
+                 .select_from(ExamResult)
+                 .join(Exam, ExamResult.exam_id == Exam.id)
+                 .filter(Exam.school_id == school_id)
+                 .first())
 
         if not stats or stats.mean_score is None:
             return None
@@ -44,12 +45,12 @@ def update_school_performance(school_id):
             (func.avg(case((ExamResult.marks >= 50, 1), else_=0)) * 100).label('pass_rate'),
             func.count(ExamResult.id).label('count')
         )
-        .select_from(ExamResult)
-        .join(Subject, ExamResult.subject_id == Subject.id)
-        .join(Exam, ExamResult.exam_id == Exam.id)
-        .filter(Exam.school_id == school_id)
-        .group_by(Subject.name)
-        .all())
+                         .select_from(ExamResult)
+                         .join(Subject, ExamResult.subject_id == Subject.id)
+                         .join(Exam, ExamResult.exam_id == Exam.id)
+                         .filter(Exam.school_id == school_id)
+                         .group_by(Subject.name)
+                         .all())
 
         # Get class-wise statistics with explicit joins
         class_stats = (db.session.query(
@@ -58,13 +59,13 @@ def update_school_performance(school_id):
             (func.avg(case((ExamResult.marks >= 50, 1), else_=0)) * 100).label('pass_rate'),
             func.count(distinct(ExamResult.student_id)).label('count')
         )
-        .select_from(ExamResult)
-        .join(Student, ExamResult.student_id == Student.id)
-        .join(AcademicClass, Student.academic_class_id == AcademicClass.id)
-        .join(Exam, ExamResult.exam_id == Exam.id)
-        .filter(Exam.school_id == school_id)
-        .group_by(AcademicClass.name)
-        .all())
+                       .select_from(ExamResult)
+                       .join(Student, ExamResult.student_id == Student.id)
+                       .join(AcademicClass, Student.academic_class_id == AcademicClass.id)
+                       .join(Exam, ExamResult.exam_id == Exam.id)
+                       .filter(Exam.school_id == school_id)
+                       .group_by(AcademicClass.name)
+                       .all())
 
         return {
             'overall': {
@@ -106,12 +107,12 @@ def get_school_performance(school_id, exam_id=None):
             Exam,
             AcademicClass
         )
-        .select_from(ExamResult)
-        .join(Exam, ExamResult.exam_id == Exam.id)
-        .join(Student, ExamResult.student_id == Student.id)
-        .join(Subject, ExamResult.subject_id == Subject.id)
-        .join(AcademicClass, Student.academic_class_id == AcademicClass.id)
-        .filter(Exam.school_id == school_id))
+                 .select_from(ExamResult)
+                 .join(Exam, ExamResult.exam_id == Exam.id)
+                 .join(Student, ExamResult.student_id == Student.id)
+                 .join(Subject, ExamResult.subject_id == Subject.id)
+                 .join(AcademicClass, Student.academic_class_id == AcademicClass.id)
+                 .filter(Exam.school_id == school_id))
 
         if exam_id:
             query = query.filter(ExamResult.exam_id == exam_id)
@@ -133,23 +134,50 @@ def get_school_performance(school_id, exam_id=None):
             func.count(ExamResult.id)
         ).group_by(ExamResult.grade).all()
 
-        # Get top/bottom students with explicit joins
-        student_perf = (db.session.query(
-            Student.id,
-            Student.name,
-            func.avg(ExamResult.marks).label('avg_score')
-        )
-        .select_from(ExamResult)
-        .join(Student, ExamResult.student_id == Student.id)
-        .join(Exam, ExamResult.exam_id == Exam.id)
-        .filter(Exam.school_id == school_id)
-        .group_by(Student.id, Student.name)
-        .order_by(func.avg(ExamResult.marks)).all())
+        # Get all students with their scores
+        all_students = []
+        students = db.session.query(Student).join(AcademicClass).filter(Student.school_id == school_id).all()
 
-        top_students = [{'name': s.name, 'avg_score': round(s.avg_score, 1)}
-                       for s in student_perf[-5:][::-1]]
-        bottom_students = [{'name': s.name, 'avg_score': round(s.avg_score, 1)}
-                          for s in student_perf[:5]]
+        for student in students:
+            # Get all exam results for this student
+            results = ExamResult.query.filter_by(student_id=student.id)
+            if exam_id:
+                results = results.filter_by(exam_id=exam_id)
+            results = results.join(Subject).all()
+
+            if not results:
+                continue
+
+            scores = {r.subject.name: r.marks for r in results}
+            total = sum(scores.values())
+            avg = total / len(scores) if scores else 0
+
+            all_students.append({
+                'id': student.id,
+                'name': student.name,
+                'class_name': student.academic_class.name,
+                'total_score': total,
+                'avg_score': avg,
+                'scores': scores
+            })
+
+        # Sort students by total score descending
+        all_students.sort(key=lambda x: x['total_score'], reverse=True)
+
+        # Get top/bottom students from the all_students list
+        top_students = [{
+            'name': s['name'],
+            'avg_score': round(s['avg_score'], 1),
+            'total_score': round(s['total_score'], 1),
+            'grade': get_grade_from_score(s['avg_score'])
+        } for s in all_students[:5]]
+
+        bottom_students = [{
+            'name': s['name'],
+            'avg_score': round(s['avg_score'], 1),
+            'total_score': round(s['total_score'], 1),
+            'grade': get_grade_from_score(s['avg_score'])
+        } for s in all_students[-5:]]
 
         # Get teacher performance with explicit joins
         teacher_perf = (db.session.query(
@@ -158,13 +186,13 @@ def get_school_performance(school_id, exam_id=None):
             func.avg(ExamResult.marks).label('avg_score'),
             (func.avg(case((ExamResult.marks >= 50, 1), else_=0)) * 100).label('pass_rate')
         )
-        .select_from(ExamResult)
-        .join(Subject, ExamResult.subject_id == Subject.id)
-        .join(Exam, ExamResult.exam_id == Exam.id)
-        .join(Subject.teachers)  # This uses the many-to-many relationship directly
-        .filter(Exam.school_id == school_id)
-        .group_by(User.id, User.username)
-        .all())
+                        .select_from(ExamResult)
+                        .join(Subject, ExamResult.subject_id == Subject.id)
+                        .join(Exam, ExamResult.exam_id == Exam.id)
+                        .join(Subject.teachers)  # This uses the many-to-many relationship directly
+                        .filter(Exam.school_id == school_id)
+                        .group_by(User.id, User.username)
+                        .all())
 
         # Get performance by subject and class
         by_subject = query.with_entities(
@@ -214,6 +242,7 @@ def get_school_performance(school_id, exam_id=None):
                 'avg_score': round(t.avg_score, 1),
                 'pass_rate': round(t.pass_rate, 1)
             } for t in teacher_perf],
+            'all_students': all_students,
             'top_students': top_students,
             'bottom_students': bottom_students,
             'trends': get_performance_trends(school_id)
@@ -224,6 +253,20 @@ def get_school_performance(school_id, exam_id=None):
         raise e
 
 
+def get_grade_from_score(score):
+    """Helper function to convert score to letter grade"""
+    if score >= 80:
+        return 'A'
+    elif score >= 70:
+        return 'B'
+    elif score >= 60:
+        return 'C'
+    elif score >= 50:
+        return 'D'
+    else:
+        return 'E'
+
+
 def get_performance_trends(school_id, months=6):
     """Get historical performance trends with explicit joins"""
     trend_data = (db.session.query(
@@ -231,13 +274,13 @@ def get_performance_trends(school_id, months=6):
         func.avg(ExamResult.marks).label('mean_score'),
         (func.avg(case((ExamResult.marks >= 50, 1), else_=0)) * 100).label('pass_rate')
     )
-    .select_from(ExamResult)
-    .join(Exam, ExamResult.exam_id == Exam.id)
-    .filter(Exam.school_id == school_id)
-    .group_by(func.to_char(Exam.exam_date, 'YYYY-MM'))
-    .order_by(func.to_char(Exam.exam_date, 'YYYY-MM').desc())
-    .limit(months)
-    .all())
+                  .select_from(ExamResult)
+                  .join(Exam, ExamResult.exam_id == Exam.id)
+                  .filter(Exam.school_id == school_id)
+                  .group_by(func.to_char(Exam.exam_date, 'YYYY-MM'))
+                  .order_by(func.to_char(Exam.exam_date, 'YYYY-MM').desc())
+                  .limit(months)
+                  .all())
 
     if not trend_data:
         return {
@@ -276,9 +319,9 @@ def get_student_performance(student_id, limit=5):
     """Generate performance analytics for a single student"""
     results = ExamResult.query.filter_by(student_id=student_id) \
         .options(
-            db.joinedload(ExamResult.subject),
-            db.joinedload(ExamResult.exam)
-        ) \
+        db.joinedload(ExamResult.subject),
+        db.joinedload(ExamResult.exam)
+    ) \
         .order_by(ExamResult.exam_date.desc()) \
         .limit(limit) \
         .all()

@@ -4,7 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="5b171d63-353d-43d9-938f-2d2b605ae7a1" name="Changes" comment="Updating Files" />
+    <list default="true" id="5b171d63-353d-43d9-938f-2d2b605ae7a1" name="Changes" comment="Updating Files">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/services/analysis.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/services/analysis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/templates/dashboard_school.html" beforeDir="false" afterPath="$PROJECT_DIR$/app/templates/dashboard_school.html" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -182,7 +186,15 @@
       <option name="project" value="LOCAL" />
       <updated>1753121516016</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="Updating Files">
+      <option name="closed" value="true" />
+      <created>1753173884632</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1753173884632</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
