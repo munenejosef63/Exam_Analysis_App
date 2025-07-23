@@ -134,12 +134,16 @@ def get_school_performance(school_id, exam_id=None):
             func.count(ExamResult.id)
         ).group_by(ExamResult.grade).all()
 
-        # Get all students with their scores
-        all_students = []
-        students = db.session.query(Student).join(AcademicClass).filter(Student.school_id == school_id).all()
+        # Get all students with their scores and stream information
+        students_query = (db.session.query(
+            Student,
+            AcademicClass
+        )
+                          .join(AcademicClass, Student.academic_class_id == AcademicClass.id)
+                          .filter(Student.school_id == school_id))
 
-        for student in students:
-            # Get all exam results for this student
+        all_students = []
+        for student, academic_class in students_query.all():
             results = ExamResult.query.filter_by(student_id=student.id)
             if exam_id:
                 results = results.filter_by(exam_id=exam_id)
@@ -155,7 +159,8 @@ def get_school_performance(school_id, exam_id=None):
             all_students.append({
                 'id': student.id,
                 'name': student.name,
-                'class_name': student.academic_class.name,
+                'class_name': academic_class.name,
+                'stream': getattr(academic_class, 'stream', None),
                 'total_score': total,
                 'avg_score': avg,
                 'scores': scores
@@ -210,6 +215,50 @@ def get_school_performance(school_id, exam_id=None):
             func.count(distinct(ExamResult.student_id)).label('total_students')
         ).group_by(AcademicClass.name).all()
 
+        # Get detailed class performance with streams
+        classes = (db.session.query(AcademicClass)
+                   .filter(AcademicClass.school_id == school_id)
+                   .order_by(AcademicClass.name)
+                   .all())
+
+        by_class_detailed = {}
+        for class_obj in classes:
+            # Get students in this class
+            class_students = [s for s in all_students if s['class_name'] == class_obj.name]
+
+            # Calculate class metrics
+            if class_students:
+                class_avg = sum(s['avg_score'] for s in class_students) / len(class_students)
+                class_pass_rate = (sum(1 for s in class_students if s['avg_score'] >= 50) / len(class_students)) * 100
+            else:
+                class_avg = 0
+                class_pass_rate = 0
+
+            # Check if class has streams
+            streams = set(s['stream'] for s in class_students if s.get('stream'))
+
+            stream_performance = {}
+            if streams:
+                for stream in streams:
+                    stream_students = [s for s in class_students if s.get('stream') == stream]
+                    if stream_students:
+                        stream_avg = sum(s['avg_score'] for s in stream_students) / len(stream_students)
+                        stream_pass_rate = (sum(1 for s in stream_students if s['avg_score'] >= 50) / len(
+                            stream_students)) * 100
+
+                        stream_performance[stream] = {
+                            'students': stream_students,
+                            'mean': stream_avg,
+                            'pass_rate': stream_pass_rate
+                        }
+
+            by_class_detailed[class_obj.name] = {
+                'students': class_students,
+                'mean': class_avg,
+                'pass_rate': class_pass_rate,
+                'streams': stream_performance if streams else None
+            }
+
         return {
             'overall': {
                 'mean': round(overall.mean, 1),
@@ -235,6 +284,7 @@ def get_school_performance(school_id, exam_id=None):
                     'total_students': c.total_students
                 } for c in by_class
             },
+            'by_class_detailed': by_class_detailed,
             'grade_distribution': dict(grade_dist),
             'teacher_performance': [{
                 'name': t.username,

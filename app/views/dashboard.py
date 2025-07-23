@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, flash, redirect, url_for, make_response
 from flask_login import login_required, current_user
 from app.services.analysis import get_school_performance, get_student_performance, update_school_performance
-from app.models import Exam, School, Payment, Subject, AcademicClass, User, ExamResult, teacher_subjects
+from app.models import Exam, School, Payment, Subject, AcademicClass, User, ExamResult, teacher_subjects, Student
 from app import db
 from datetime import datetime, timedelta, date
 from sqlalchemy import func, desc, case, and_
@@ -436,8 +436,10 @@ def school_dashboard():
 
         # Prepare data for template with consistent datetime types
         current_date = datetime.now()  # Using datetime consistently
+        students = User.query.filter_by(school_id=school.id, role='student').all()
 
         data = {
+            'students': students if students else [],
             'school': school,
             'performance': performance,
             'exams': exams,
